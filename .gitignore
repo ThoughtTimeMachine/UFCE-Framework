@@ -51,6 +51,17 @@ coverage.xml
 .pytest_cache/
 cover/
 
+# Compiled C++ Binaries
+godmode_test
+attention_gpu_test
+*.exe
+*.o
+*.out
+
+# Large Data/Temporary
+*.log
+.DS_Store (for Mac users)
+
 # Translations
 *.mo
 *.pot

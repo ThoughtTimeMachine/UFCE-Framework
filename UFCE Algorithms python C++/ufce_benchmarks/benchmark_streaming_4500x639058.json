@@ -1,0 +1,11 @@
+{
+    "n_r": 4500,
+    "n_t": 639058,
+    "total_points": 2875761000,
+    "compute_time_s": 0.06383323669433594,
+    "points_per_sec": 45051154366.03221,
+    "memory_overhead_mb": 47.5,
+    "gamma_mean": -6.515002761537666e-20,
+    "gamma_variance": 12.498466333355761,
+    "cpu_cores": 32
+}
