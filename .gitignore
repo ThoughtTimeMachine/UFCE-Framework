@@ -26,6 +26,17 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# --- C++ / CUDA Compilations ---
+# Ignore the specific executables you built
+godmode_test
+attention_gpu_test
+attention_test
+
+# --- VS Code & Docker ---
+.vscode/
+.devcontainer/local-features/
+# We keep .devcontainer/devcontainer.json so others can use it!
+
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
