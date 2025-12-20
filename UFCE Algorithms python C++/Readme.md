@@ -11,5 +11,3 @@ pip-compile -v --generate-hashes requirementList.txt --output-file=requirements.
 pip uninstall -y pip-tools click build pyproject_hooks
 
 # 4.Rebuild the container and it will install the dependencies now
-
-[!IMPORTANT] Once the command completes, open the generated temp.lock file, copy the hashes, and paste them into your Requirements file under the # --- JAX Hybrid Stack --- section.
