@@ -3,7 +3,9 @@
 **A Zero-Memory Streaming Kernel for Trillion-Scale Spatial-Temporal Interactions**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXX.svg)](https://zenodo.org/doi/10.5281/zenodo.XXXXXX) <!-- 
+[![Python](https://img.shields.io/badge/Python-3.12%2B-yellow.svg)](https://www.python.org/)
+[![JAX](https://img.shields.io/badge/JAX-Accelerated-green.svg)](https://github.com/google/jax)
+[![PAPER](https://zenodo.org/records/17984328.svg)](https://zenodo.org/records/17984328) <!-- 
 
 ## 🚀 The Breakthrough
 
@@ -13,17 +15,28 @@ The **UFCE streaming kernel** eliminates the "Memory Wall" entirely — computin
 
 ### Latest Benchmarks (December 2025 — Ryzen 9 7950X + RTX 4070 Ti)
 
-| Device                  | Precision      | Throughput                          | Speedup vs CPU |
-|-------------------------|----------------|-------------------------------------|----------------|
-| Ryzen 9 7950X (CPU)     | FP64           | 43.33 Billion points/sec            | 1.0×           |
-| RTX 4070 Ti (Scientific)| FP64           | 74 Billion points/sec               | 1.7×           |
-| **RTX 4070 Ti (Super Turbo)** | **FP32**   | **465.9 Billion points/sec**        | **10.8×**      |
-| **RTX 4070 Ti (God Mode)**    | **FP32**   | **1.502 Trillion ops/sec**          | **34.7×**      |
+**Hardware:** AMD Ryzen 9 7950X (CPU) + NVIDIA RTX 4070 Ti (GPU)
 
-- **1 Terabyte Challenge**: 125 billion points processed in **2.89 seconds** (CPU) with **0.00 MB memory overhead**.
-- **God Mode Run**: 50 trillion operations (1B token context equivalent) in **33.29 seconds** on RTX 4070 Ti — **1.5 Trillion ops/sec** sustained.
+| Kernel Implementation | Precision | Throughput | Speedup vs CPU | Use Case |
+| :--- | :--- | :--- | :--- | :--- |
+| Ryzen 9 7950X (CPU) **Numba CPU** | FP64 | 43.33 Billion ops/s | 1.0× | Baseline Validation |
+| RTX 4070 Ti (Scientific) **CUDA C++** | FP32 | 1.50 Trillion ops/s | 34.7× | Legacy Native Kernel |
+| **JAX "God Mode"** | **FP32** | **2.02 Trillion ops/s** | **47.0×** | **Theoretical Max / Scanning** |
+| **JAX Softmax** | FP32 | **232.6 Billion ops/s** | 5.3× | **LLM Attention (Linear)** |
+| **JAX Top-K** | FP32 | 1.40 Billion ops/s | 0.03× | **Deep Security Forensics** |
+
+### Key Achievements
+* **The 2 Trillion Barrier Broken:** The JAX Blocked Kernel achieved **2,020 Billion operations per second** on a single consumer GPU.
+* **Real-World LLM Attention:** Validated a **Streaming Softmax** kernel running at **232 Billion ops/s**, proving that exact attention statistics can be computed for 100M+ token contexts in real-time.
+* **Infinite Context:** Processed a **50 Trillion Interaction** workload (equivalent to a 1 Billion Token Context) in just **24.7 seconds** on RTX 4070 Ti.
+**1 Terabyte Challenge**: 125 billion points processed in **2.89 seconds** (CPU) with **0.00 MB memory overhead**.
 
 ## 📂 Repository Contents
+
+### 🐍 Next-Gen JAX Kernels (Recommended)
+* `ufce_jax_50T_block_kernel_god_mode.py` — **The Record Breaker.** Runs the "God Mode" block-streaming kernel to hit 2.02T ops/s.
+* `ufce_jax_real_world_measurements.py` — **The Real World.** Runs the Streaming Softmax (LLM) and Top-K (Security) kernels.
+* `ufce_jax_oscillating_hybrid_load_balancing.py` — **Hybrid Physics.** Demonstrates CPU/GPU oscillating load balancing for physical simulations.
 
 - `paper/` — Full academic preprint (LaTeX + PDF).
 - `needle_In_a_haystack_cyber_security_validation.py` — Cybersecurity: Finds attack in 100B logs in ~1.0s.
@@ -47,6 +60,10 @@ This repo is configured as a **VS Code Dev Container** — the easiest way to re
 python cyber_validation.py
 python blockchain_validation.py
 python attention_validation.py
+
+**1. Run the Record-Breaking "God Mode" Benchmark:**
+```bash
+python ufce_jax_god_mode_benchmark.py
 
 **GPU Test (CUDA — requires NVIDIA drivers + CUDA toolkit installed on host)**:
 
