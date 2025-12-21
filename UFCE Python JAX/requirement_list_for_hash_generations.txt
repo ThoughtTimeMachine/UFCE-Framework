@@ -16,5 +16,10 @@ pyparsing==3.2.0
 python-dateutil==2.9.0.post0
 six==1.17.0
 
+# New Dependencies for Infinite Context Agent
+sentence-transformers==3.3.1
+tqdm==4.67.1
+requests==2.32.3
+
 # JAX (We only ask for the version, the tool gets the rest)
 jax[cuda12_pip]==0.4.31
