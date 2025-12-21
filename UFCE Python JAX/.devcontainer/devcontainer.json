@@ -1,22 +1,35 @@
-// For format details, see https://aka.ms/devcontainer.json. For config options, see the
-// README at: https://github.com/devcontainers/templates/tree/main/src/python
 {
-	"name": "Python 3",
-	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-	"image": "mcr.microsoft.com/devcontainers/python:2-3.12-bookworm"
+    "name": "Python 3.12 UFCE JAX Accelerator",
+    "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
 
-	// Features to add to the dev container. More info: https://containers.dev/features.
-	// "features": {},
+    // 1. THIS IS THE HARDWARE BRIDGE:
+    "runArgs": [
+        "--gpus", "all",
+        "--shm-size=8g"
+    ],
 
-	// Use 'forwardPorts' to make a list of ports inside the container available locally.
-	// "forwardPorts": [],
+    // 2. THIS INSTALLS THE NVIDIA DRIVER TOOLS INSIDE THE CONTAINER:
+    "features": {
+        "ghcr.io/devcontainers/features/nvidia-cuda:1": {
+            "installCudnn": true,
+            "cudaVersion": "12.4"
+        }
+    },
 
-	// Use 'postCreateCommand' to run commands after the container is created.
-	// "postCreateCommand": "pip3 install --user -r requirements.txt",
+    "postCreateCommand": "python -m venv .venv && ./.venv/bin/pip install -r requirements.txt --require-hashes",
 
-	// Configure tool-specific properties.
-	// "customizations": {},
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "python.defaultInterpreterPath": ".venv/bin/python",
+                "python.terminal.activateEnvInCurrentTerminal": true
+            },
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance"
+            ]
+        }
+    },
 
-	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
-	// "remoteUser": "root"
+    "remoteUser": "vscode"
 }
