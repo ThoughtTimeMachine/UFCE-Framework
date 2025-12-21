@@ -1,4 +1,4 @@
-before running project, run:
+before running project for the first time, to generate the requirements.txt library list of hashes, run:
 
 ```bash
 # 1. Setup
