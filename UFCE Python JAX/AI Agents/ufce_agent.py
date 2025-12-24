@@ -22,11 +22,13 @@ import json
 import time
 
 # --- CONFIG ---
-DB_PATH = "knowledge_base.dat"
-META_PATH = "metadata.txt"
+# UPDATED PATHS FOR TEST RUN:
+DB_PATH = "knowledge_base/wiki_test_subset.dat"
+META_PATH = "knowledge_base/wiki_test_subset_meta.txt"
+
 EMBEDDING_DIM = 384  # Must match your ingest model
 TOP_K = 5            # How many chunks to give the LLM
-OLLAMA_URL = "http://localhost:11434/api/generate"
+OLLAMA_URL = "http://host.docker.internal:11434/api/generate"
 MODEL_NAME = "llama3" # Or "mistral", "gemma", etc.
 
 # --- LOAD RESOURCES ---
@@ -35,7 +37,6 @@ embedder = SentenceTransformer('all-MiniLM-L6-v2')
 
 print("Mapping Massive Database...")
 # This is instant (Zero-Copy)
-# We assume the file exists from the previous ingest step
 try:
     # Use 'r' mode (Read Only) to protect data
     vectors = np.memmap(DB_PATH, dtype='float32', mode='r')
@@ -44,14 +45,18 @@ try:
     vectors = vectors.reshape((num_vectors, EMBEDDING_DIM))
     print(f"✅ Linked to {num_vectors} vectors (Virtual Memory).")
 except FileNotFoundError:
-    print("❌ Error: database not found. Run ingest_pipeline.py first.")
+    print(f"❌ Error: Database file not found at {DB_PATH}")
+    print("   Did you run ufce_ingestion_pipeline_sharded.py?")
     exit()
 
 # Load Metadata (The actual text)
-# For 100GB files, use SQLite instead of a list. For <1GB, a list is fine.
 print("Loading Text Index...")
-with open(META_PATH, "r", encoding="utf-8") as f:
-    text_chunks = f.readlines()
+try:
+    with open(META_PATH, "r", encoding="utf-8") as f:
+        text_chunks = f.readlines()
+except FileNotFoundError:
+    print(f"❌ Error: Metadata file not found at {META_PATH}")
+    exit()
 
 # --- THE JAX KERNEL (The Engine) ---
 @jit
@@ -60,13 +65,8 @@ def fast_scanner(query_vec, db_chunk):
     q_norm = query_vec / jnp.linalg.norm(query_vec)
     
     # Dot Product (Batch Matrix Multiply)
-    # (Chunk_Size, Dim) @ (Dim, 1) -> (Chunk_Size, )
     scores = jnp.dot(db_chunk, q_norm)
     
-    # We return the top scores and indices for this chunk
-    # (In a real massive system, we'd use the block-streaming logic here)
-    # For simplicity in this demo, we scan in one go if VRAM allows, 
-    # or you wrap this in the Python loop we discussed.
     return scores
 
 def query_ollama(prompt):
@@ -75,17 +75,41 @@ def query_ollama(prompt):
         "prompt": prompt,
         "stream": False
     }
-    response = requests.post(OLLAMA_URL, json=data)
-    return response.json()['response']
+    try:
+        response = requests.post(OLLAMA_URL, json=data)
+        if response.status_code == 200:
+            return response.json()['response']
+        else:
+            return f"Error: Ollama returned status {response.status_code}"
+    except Exception as e:
+        return f"Error connecting to Ollama: {e}"
 
 # Define a Safe Chunk Size for 12GB VRAM
-# 500,000 vectors * 384 dims * 4 bytes = ~768 MB per chunk
-# This leaves plenty of room for the OS and display.
 STREAM_BATCH_SIZE = 500_000 
 
+def print_banner():
+    print(r"""
+   __  ________________
+  / / / / ____/ ____/ ____/
+ / / / / /_  / /   / __/
+/ /_/ / __/ / /___/ /___
+\____/_/    \____/_____/
+    ___   _____________   ______
+   /   | / ____/ ____/ | / /_  __/
+  / /| |/ / __/ __/ /  |/ / / /
+ / ___ / /_/ / /___/ /|  / / /
+/_/  |_\____/_____/_/ |_/ /_/
+
+    :: UFCE Framework ::  (v1.0.0 - JAX Accelerated)
+    [Mode: Infinite Context] [Device: GPU/NVIDIA]
+    """)
+    print("-" * 60)
+
 def run_agent():
-    print(f"\n🤖 UFCE Infinite-Context Agent ({MODEL_NAME})")
-    print(f"🌊 Streaming Mode Active: Batch Size {STREAM_BATCH_SIZE}")
+    print_banner()
+    print(f"🤖 Agent Model: {MODEL_NAME}")
+    print(f"🌊 Streaming Batch Size: {STREAM_BATCH_SIZE}")
+    print(f"📚 Knowledge Base: {num_vectors} vectors")
     print("Type 'exit' to quit.\n")
     
     while True:
@@ -102,29 +126,19 @@ def run_agent():
         all_scores = []
         
         # We iterate over the massive memmap in chunks
-        # This is what makes it "Infinite Context" on consumer hardware
         for i in range(0, len(vectors), STREAM_BATCH_SIZE):
-            # Create a 'view' (slice) of the memmap - Zero RAM cost
             chunk = vectors[i : i + STREAM_BATCH_SIZE]
-            
-            # Send ONLY this chunk to the GPU
-            # JAX is smart enough to handle the numpy slice
             scores_chunk = fast_scanner(q_jax, chunk)
-            
-            # Move results back to CPU to free VRAM for next chunk
             all_scores.append(np.array(scores_chunk))
             
-        # Concatenate all scores (CPU side)
         final_scores = np.concatenate(all_scores)
         
         # 3. Get Top-K (Exact Brute Force)
-        # We use argpartition for O(N) selection speed
         top_k_indices = np.argpartition(final_scores, -TOP_K)[-TOP_K:]
         
         # Retrieve Text
         retrieved_context = []
         for idx in top_k_indices:
-            # Check bounds (safety)
             if idx < len(text_chunks):
                 retrieved_context.append(text_chunks[idx].strip())
             
