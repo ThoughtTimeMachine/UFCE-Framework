@@ -18,6 +18,7 @@ six==1.17.0
 
 # New Dependencies for Infinite Context Agent
 sentence-transformers==3.3.1
+transformers==4.46.3    # Added: Required for AutoTokenizer
 tqdm==4.67.1
 requests==2.32.3
 
