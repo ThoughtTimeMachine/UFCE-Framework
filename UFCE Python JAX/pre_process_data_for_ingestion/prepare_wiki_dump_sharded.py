@@ -14,7 +14,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-
 import xml.etree.ElementTree as ET
 import re
 import os
@@ -23,7 +22,7 @@ from tqdm import tqdm
 
 # --- CONFIG ---
 INPUT_XML = "enwiki-latest-pages-articles.xml"
-OUTPUT_DIR = "wiki_shards"      # New directory for shards
+OUTPUT_DIR = "wiki_shards"      # Directory for shards
 SHARD_SIZE_LIMIT = 500 * 1024 * 1024  # 500 MB per file (Adjustable)
 
 # --- TEST MODE CONFIG ---
@@ -40,11 +39,6 @@ def clean_text(text):
         return ""
     return text.strip()
 
-def get_tag_name(elem):
-    if '}' in elem.tag:
-        return elem.tag.split('}', 1)[1]
-    return elem.tag
-
 def find_child_by_tag(parent, local_tag_name):
     for child in parent:
         if child.tag.endswith(local_tag_name):
@@ -52,7 +46,6 @@ def find_child_by_tag(parent, local_tag_name):
     return None
 
 def get_shard_filename(index, is_test_mode=False):
-    """Generates filenames like wiki_shard_001.txt or wiki_test_subset.txt"""
     if is_test_mode:
         return os.path.join(OUTPUT_DIR, "wiki_test_subset.txt")
     return os.path.join(OUTPUT_DIR, f"wiki_shard_{index:03d}.txt")
@@ -63,22 +56,36 @@ def process_wiki_xml():
         return
 
     # --- USER MENU ---
-    print("-" * 50)
+    print("-" * 60)
     print(f"📄 Wiki Dump Processor (Input: {INPUT_XML})")
-    print("-" * 50)
-    print("1. TEST RUN (Process ~20k articles only - Great for Agent Testing)")
-    print("2. FULL RUN (Process entire 46GB file into Shards)")
-    print("-" * 50)
+    print("-" * 60)
+    print("1. TEST RUN (Rapid Validation)")
+    print("   -> Stops after 20,000 articles. Output: wiki_test_subset.txt")
+    print("\n2. 1/4 DATASET RUN (Medium Stress Test)")
+    print("   -> Stops after ~11.5GB (approx 23 shards).")
+    print("\n3. 1/2 DATASET RUN (Heavy Stress Test)")
+    print("   -> Stops after ~23GB (approx 46 shards).")
+    print("\n4. FULL PRODUCTION RUN")
+    print("   -> Processes entire 46GB file.")
+    print("-" * 60)
     
-    choice = input("Select Mode [1/2]: ").strip()
+    choice = input("Select Mode [1-4]: ").strip()
     
     is_test_mode = False
+    max_shards = float('inf') 
+
     if choice == '1':
         print("\n🚀 Starting TEST RUN...")
         is_test_mode = True
     elif choice == '2':
-        print("\n🏭 Starting FULL PRODUCTION RUN (Sharding enabled)...")
-        is_test_mode = False
+        print("\n🏗️  Starting 1/4 DATASET RUN...")
+        max_shards = 23
+    elif choice == '3':
+        print("\n🏭 Starting 1/2 DATASET RUN...")
+        max_shards = 46
+    elif choice == '4':
+        print("\n🌍 Starting FULL PRODUCTION RUN...")
+        max_shards = float('inf')
     else:
         print("Invalid choice. Exiting.")
         return
@@ -132,36 +139,46 @@ def process_wiki_xml():
                                     print(f"\n🛑 Test limit reached ({TEST_ARTICLE_LIMIT} articles). Stopping.")
                                     break
                                 
-                                # 2. Shard Size Limit (Only in Full Mode)
+                                # 2. Shard Size Limit
                                 if not is_test_mode and current_shard_size >= SHARD_SIZE_LIMIT:
                                     f_out.close()
                                     print(f"\n📦 Shard {current_shard_idx} full ({current_shard_size/1024/1024:.2f} MB).")
                                     
+                                    # Partial Run Check
+                                    if current_shard_idx >= max_shards:
+                                        print(f"🛑 Partial Run limit reached ({max_shards} shards). Stopping.")
+                                        elem.clear()
+                                        break
+
+                                    # Prepare Next Shard
                                     current_shard_idx += 1
                                     current_shard_size = 0
                                     current_filename = get_shard_filename(current_shard_idx)
                                     f_out = open(current_filename, "w", encoding="utf-8")
-                                    # print(f"📂 Switched to: {current_filename}") # Optional: reduce spam
 
                 # Clear memory
                 elem.clear()
                 if hasattr(elem, 'getparent') and elem.getparent() is not None:
                      elem.getparent().remove(elem)
-
+    
+    # --- SAFETY NETS ---
+    except ET.ParseError:
+        print("\n⚠️  XML Parse Error or End of File reached. Saving progress...")
     except KeyboardInterrupt:
         print("\n🛑 User interrupted. Closing files safely...")
+    except Exception as e:
+        print(f"\n❌ Unexpected error: {e}")
 
     finally:
-        f_out.close()
+        if not f_out.closed:
+            f_out.close()
         
-    print("-" * 50)
+    print("-" * 60)
     print(f"✅ DONE. Processed {count} articles.")
     if is_test_mode:
-        print(f"👉 Test file ready: {os.path.join(OUTPUT_DIR, 'wiki_test_subset.txt')}")
-        print("   Feed THIS file into your ingestion pipeline for a fast test!")
+        print(f"👉 Test file: {os.path.join(OUTPUT_DIR, 'wiki_test_subset.txt')}")
     else:
-        print(f"👉 Shards saved in: {OUTPUT_DIR}/")
-        print("   You can process these one by one or merge them later.")
+        print(f"👉 Generated {current_shard_idx} shards in: {OUTPUT_DIR}/")
 
 if __name__ == "__main__":
     process_wiki_xml()
