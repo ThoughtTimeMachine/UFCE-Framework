@@ -1,5 +1,3 @@
-<<<<<<< Updated upstream
-=======
 
 # Copyright (C) 2025 Kyle Killian
 #
@@ -16,89 +14,110 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
->>>>>>> Stashed changes
 import os
 import numpy as np
 from sentence_transformers import SentenceTransformer
+from transformers import AutoTokenizer
 from tqdm import tqdm
 
-# --- CONFIGURATION ---
-INPUT_FILE = "large_dataset.txt"   # Your massive text file (Logs, Books, etc.)
-OUTPUT_BIN = "knowledge_base.dat"  # The optimized vector file
-OUTPUT_META = "metadata.txt"       # Keeps track of which text matches which vector
-CHUNK_SIZE = 500                   # Characters per chunk (approx. 100-150 tokens)
-BATCH_SIZE = 32                    # How many chunks to embed at once (GPU batch)
-EMBEDDING_DIM = 384                # Depends on model (MiniLM=384, BGE=1024)
+# --- CONFIG ---
+INPUT_FILE = "large_dataset.txt"   # Must be the CLEAN text file (from Step 1)
+OUTPUT_BIN = "knowledge_base.dat"
+OUTPUT_META = "metadata.txt"
+BATCH_SIZE = 64        # GPU batch size (Higher = Faster, more VRAM)
+MAX_TOKENS = 256       # Professional semantic chunk size
+EMBEDDING_DIM = 384    # MiniLM dimension
 
-# Load a fast, local embedding model
-# 'all-MiniLM-L6-v2' is incredibly fast and good for general English
-print("Loading Embedding Model...")
-model = SentenceTransformer('all-MiniLM-L6-v2') 
+# Load Model & Tokenizer
+print("Loading Model & Tokenizer...")
+model = SentenceTransformer('all-MiniLM-L6-v2')
+tokenizer = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
 
-def count_lines(filename):
-    """Counts lines quickly for the progress bar."""
-    with open(filename, 'rb') as f:
-        return sum(1 for _ in f)
-
-def ingest_data():
-    # 1. PRE-ALLOCATION
-    # We need to know how big the file will be roughly.
-    # For a real massive file, we might append, but pre-allocating is faster.
-    # Let's count chunks first (simplification for this script).
-    
-    print(f"Reading {INPUT_FILE}...")
-    with open(INPUT_FILE, "r", encoding="utf-8", errors="ignore") as f:
-        text = f.read()
-    
-    # Simple chunking by character count (Advanced: use a tokenizer)
-    chunks = [text[i:i+CHUNK_SIZE] for i in range(0, len(text), CHUNK_SIZE)]
-    num_chunks = len(chunks)
-    
-    print(f"Total Chunks to Embed: {num_chunks}")
-    
-    # 2. CREATE MEMORY MAP ON DISK
-    # This creates the file on the hard drive immediately.
-    # It acts like an array, but data lives on disk.
-    fp = np.memmap(OUTPUT_BIN, dtype='float32', mode='w+', shape=(num_chunks, EMBEDDING_DIM))
-    
-    # 3. STREAMING EMBEDDING LOOP
-    print("Starting Ingestion Pipeline...")
-    
-    # We process in batches to keep the GPU/CPU busy
-    for i in tqdm(range(0, num_chunks, BATCH_SIZE)):
-        # a. Get Batch of Text
-        batch_text = chunks[i : i + BATCH_SIZE]
-        
-        # b. Embed (Text -> Vector)
-        # This runs on your GPU/CPU automatically via Torch
-        embeddings = model.encode(batch_text, convert_to_numpy=True)
-        
-        # c. Write to Disk (Directly into the memmap slot)
-        # No RAM spike here!
-        current_batch_size = len(batch_text)
-        fp[i : i + current_batch_size] = embeddings
-
-    # 4. FLUSH & SAVE METADATA
-    # Ensure all data is written to disk
-    fp.flush()
-    
-    # Save the text chunks so we can retrieve the answer later!
-    # (In production, use a lightweight database like SQLite, but this works for now)
-    with open(OUTPUT_META, "w", encoding="utf-8") as f:
-        for chunk in chunks:
-            f.write(chunk.replace("\n", " ") + "\n")
+def stream_chunks(filename, max_tokens=256):
+    """
+    Grok's Logic: Stream file + Tokenizer-aware chunking.
+    Benefit: Ensures chunks are semantically valid (don't cut words in half).
+    """
+    buffer_ids = []
+    with open(filename, "r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            # Tokenize line and add to buffer
+            line_ids = tokenizer.encode(line, add_special_tokens=False)
+            buffer_ids.extend(line_ids)
             
-    print(f"\n✅ Ingestion Complete!")
-    print(f"Vector Database: {OUTPUT_BIN} ({os.path.getsize(OUTPUT_BIN)/1e6:.2f} MB)")
-    print(f"Metadata: {OUTPUT_META}")
+            # While buffer is large enough, yield chunks
+            while len(buffer_ids) >= max_tokens:
+                chunk = tokenizer.decode(buffer_ids[:max_tokens])
+                yield chunk
+                buffer_ids = buffer_ids[max_tokens:]
+        
+        # Final cleanup
+        if buffer_ids:
+            yield tokenizer.decode(buffer_ids)
+
+def run_ingestion():
+    print(f"Starting True Streaming Ingestion of {INPUT_FILE}...")
+    
+    # --- PASS 1: Indexing (CPU Bound) ---
+    # We read the file once just to write metadata and count chunks.
+    # We DO NOT save the text to a list variable.
+    print("Pass 1: Writing Metadata & Counting Chunks...")
+    
+    num_chunks = 0
+    with open(OUTPUT_META, "w", encoding="utf-8") as meta_f:
+        # We stream the file line by line
+        for chunk in tqdm(stream_chunks(INPUT_FILE, MAX_TOKENS)):
+            clean_chunk = chunk.replace("\n", " ")
+            meta_f.write(clean_chunk + "\n")
+            num_chunks += 1
+            
+    print(f"Total Chunks Found: {num_chunks}")
+    if num_chunks == 0:
+        print("Error: No chunks found. Check your input file!")
+        return
+
+    # --- PASS 2: Vectorization (GPU Bound) ---
+    # We re-open the stream and feed the GPU in small batches.
+    print(f"Pass 2: Encoding {num_chunks} vectors to SSD...")
+    
+    # Create the memmap (Allocates 0 RAM, just disk space)
+    fp = np.memmap(OUTPUT_BIN, dtype='float32', mode='w+', shape=(num_chunks, EMBEDDING_DIM))
+
+    # Re-initialize the stream generator for the second pass
+    chunk_generator = stream_chunks(INPUT_FILE, MAX_TOKENS)
+    
+    batch_buffer = []
+    write_idx = 0
+    
+    # Process with progress bar
+    for chunk in tqdm(chunk_generator, total=num_chunks):
+        batch_buffer.append(chunk)
+        
+        # When buffer hits batch size, send to GPU
+        if len(batch_buffer) >= BATCH_SIZE:
+            # 1. Embed (GPU)
+            embeddings = model.encode(batch_buffer, convert_to_numpy=True)
+            
+            # 2. Write (SSD)
+            current_batch_len = len(embeddings)
+            fp[write_idx : write_idx + current_batch_len] = embeddings
+            
+            # 3. Cleanup (RAM)
+            batch_buffer = [] 
+            write_idx += current_batch_len
+            
+            # Optional: Flush periodically to save progress
+            if write_idx % (BATCH_SIZE * 10) == 0:
+                fp.flush()
+
+    # Process any remaining items in the buffer
+    if batch_buffer:
+        embeddings = model.encode(batch_buffer, convert_to_numpy=True)
+        fp[write_idx : write_idx + len(embeddings)] = embeddings
+        fp.flush()
+
+    print(f"✅ Success! Knowledge Base created: {OUTPUT_BIN}")
+    print(f"✅ Metadata saved: {OUTPUT_META}")
 
 if __name__ == "__main__":
-    # Create dummy data if file doesn't exist
-    if not os.path.exists(INPUT_FILE):
-        print("Generating dummy data...")
-        with open(INPUT_FILE, "w") as f:
-            for _ in range(10000):
-                f.write("System Error: Kernel panic at address 0x0045F. CPU Overload.\n")
-                f.write("User Login: Admin access granted to user 'root'.\n")
-    
-    ingest_data()
+    run_ingestion()
