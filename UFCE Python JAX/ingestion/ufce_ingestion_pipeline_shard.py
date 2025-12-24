@@ -60,28 +60,28 @@ def process_single_shard(shard_path):
 
     # --- RESUME LOGIC: Check if already done ---
     if os.path.exists(output_bin) and os.path.exists(output_meta):
-        # Optional: Check file size > 0 to ensure it wasn't a corrupt run
         if os.path.getsize(output_bin) > 0:
             print(f"⏩ Skipping {base_name} (Already processed)")
             return False
 
     print(f"\n⚡ Processing: {base_name}...")
 
-    # --- PASS 1: Count & Metadata ---
-    # We write metadata to a temp file first, then rename on success
-    # This prevents "half-finished" files from fooling the resume logic
+    # --- PASS 1: Count & Metadata (Now with Progress Bar!) ---
     temp_meta = output_meta + ".tmp"
     num_chunks = 0
     
+    # We wrap the generator in tqdm. We don't know the 'total' yet, so it shows iterations/sec.
     with open(temp_meta, "w", encoding="utf-8") as meta_f:
-        for chunk in stream_chunks(shard_path, MAX_TOKENS):
+        chunk_stream = stream_chunks(shard_path, MAX_TOKENS)
+        for chunk in tqdm(chunk_stream, desc="Pass 1 (Counting)", unit=" chunks"):
             clean_chunk = chunk.replace("\n", " ")
             meta_f.write(clean_chunk + "\n")
             num_chunks += 1
             
     if num_chunks == 0:
         print(f"⚠️  Warning: {base_name} was empty.")
-        os.remove(temp_meta)
+        if os.path.exists(temp_meta):
+            os.remove(temp_meta)
         return False
 
     # --- PASS 2: Vectorization ---
@@ -91,8 +91,8 @@ def process_single_shard(shard_path):
     batch_buffer = []
     write_idx = 0
     
-    # We use tqdm "leave=False" so the bar clears after each file
-    for chunk in tqdm(chunk_generator, total=num_chunks, desc=f"Encoding {base_name}", leave=False):
+    # Pass 2 already had a bar, but we ensure it looks good
+    for chunk in tqdm(chunk_generator, total=num_chunks, desc="Pass 2 (Embedding)", leave=False):
         batch_buffer.append(chunk)
         
         if len(batch_buffer) >= BATCH_SIZE:
@@ -109,7 +109,6 @@ def process_single_shard(shard_path):
     fp.flush()
     
     # --- FINALIZE ---
-    # Rename temp metadata to real metadata to mark "Done"
     os.rename(temp_meta, output_meta)
     return True
 
