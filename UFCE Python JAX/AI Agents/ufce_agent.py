@@ -79,8 +79,14 @@ def query_ollama(prompt):
     response = requests.post(OLLAMA_URL, json=data)
     return response.json()['response']
 
+# Define a Safe Chunk Size for 12GB VRAM
+# 500,000 vectors * 384 dims * 4 bytes = ~768 MB per chunk
+# This leaves plenty of room for the OS and display.
+STREAM_BATCH_SIZE = 500_000 
+
 def run_agent():
     print(f"\n🤖 UFCE Infinite-Context Agent ({MODEL_NAME})")
+    print(f"🌊 Streaming Mode Active: Batch Size {STREAM_BATCH_SIZE}")
     print("Type 'exit' to quit.\n")
     
     while True:
@@ -93,19 +99,35 @@ def run_agent():
         q_vec = embedder.encode(query)
         q_jax = device_put(q_vec)
         
-        # 2. UFCE Scan (The Magic)
-        # Note: If vectors > VRAM, you loop here using the chunk logic we discussed.
-        # Here we assume "Big RAM" setup for simplicity of the demo script.
-        scores = fast_scanner(q_jax, vectors) # JAX reads directly from mmap!
+        # 2. UFCE Streaming Scan (The Loop)
+        all_scores = []
         
-        # Get Top-K (We do the sort on CPU for the final aggregate if list is huge)
-        # Convert to numpy to use argpartition (fast top-k)
-        scores_np = np.array(scores) 
-        top_indices = np.argpartition(scores_np, -TOP_K)[-TOP_K:]
+        # We iterate over the massive memmap in chunks
+        # This is what makes it "Infinite Context" on consumer hardware
+        for i in range(0, len(vectors), STREAM_BATCH_SIZE):
+            # Create a 'view' (slice) of the memmap - Zero RAM cost
+            chunk = vectors[i : i + STREAM_BATCH_SIZE]
+            
+            # Send ONLY this chunk to the GPU
+            # JAX is smart enough to handle the numpy slice
+            scores_chunk = fast_scanner(q_jax, chunk)
+            
+            # Move results back to CPU to free VRAM for next chunk
+            all_scores.append(np.array(scores_chunk))
+            
+        # Concatenate all scores (CPU side)
+        final_scores = np.concatenate(all_scores)
         
+        # 3. Get Top-K (Exact Brute Force)
+        # We use argpartition for O(N) selection speed
+        top_k_indices = np.argpartition(final_scores, -TOP_K)[-TOP_K:]
+        
+        # Retrieve Text
         retrieved_context = []
-        for idx in top_indices:
-            retrieved_context.append(text_chunks[idx].strip())
+        for idx in top_k_indices:
+            # Check bounds (safety)
+            if idx < len(text_chunks):
+                retrieved_context.append(text_chunks[idx].strip())
             
         t1 = time.time()
         scan_time = t1 - t0
