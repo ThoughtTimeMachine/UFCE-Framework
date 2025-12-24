@@ -1,4 +1,3 @@
-
 # Copyright (C) 2025 Kyle Killian
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,15 +17,17 @@ import xml.etree.ElementTree as ET
 import re
 import os
 import sys
+import bz2
 from tqdm import tqdm
 
 # --- CONFIG ---
-INPUT_XML = "enwiki-latest-pages-articles.xml"
-OUTPUT_DIR = "wiki_shards"      # Directory for shards
-SHARD_SIZE_LIMIT = 500 * 1024 * 1024  # 500 MB per file (Adjustable)
+# We now point directly to the compressed file
+INPUT_FILE = "enwiki-latest-pages-articles.xml.bz2" 
+OUTPUT_DIR = "wiki_shards"
+SHARD_SIZE_LIMIT = 500 * 1024 * 1024  # 500 MB per file
 
 # --- TEST MODE CONFIG ---
-TEST_ARTICLE_LIMIT = 20000      # Stop after this many articles in Test Mode
+TEST_ARTICLE_LIMIT = 20000
 
 def clean_text(text):
     """Basic cleanup to remove Wiki markup and keep text."""
@@ -51,28 +52,30 @@ def get_shard_filename(index, is_test_mode=False):
     return os.path.join(OUTPUT_DIR, f"wiki_shard_{index:03d}.txt")
 
 def process_wiki_xml():
-    if not os.path.exists(INPUT_XML):
-        print(f"❌ Error: File {INPUT_XML} not found.")
+    if not os.path.exists(INPUT_FILE):
+        print(f"❌ Error: File {INPUT_FILE} not found.")
+        print("   Make sure the .bz2 file is in this directory!")
         return
 
     # --- USER MENU ---
     print("-" * 60)
-    print(f"📄 Wiki Dump Processor (Input: {INPUT_XML})")
+    print(f"📄 Wiki Dump Processor (Input: {INPUT_FILE})")
+    print("   ✨ Mode: Direct BZ2 Stream (No extraction needed)")
     print("-" * 60)
     print("1. TEST RUN (Rapid Validation)")
-    print("   -> Stops after 20,000 articles. Output: wiki_test_subset.txt")
+    print("   -> Stops after 20,000 articles.")
     print("\n2. 1/4 DATASET RUN (Medium Stress Test)")
-    print("   -> Stops after ~11.5GB (approx 23 shards).")
+    print("   -> Stops after ~23 shards.")
     print("\n3. 1/2 DATASET RUN (Heavy Stress Test)")
-    print("   -> Stops after ~23GB (approx 46 shards).")
+    print("   -> Stops after ~46 shards.")
     print("\n4. FULL PRODUCTION RUN")
-    print("   -> Processes entire 46GB file.")
+    print("   -> Processes entire dataset.")
     print("-" * 60)
     
     choice = input("Select Mode [1-4]: ").strip()
     
     is_test_mode = False
-    max_shards = float('inf') 
+    max_shards = float('inf')
 
     if choice == '1':
         print("\n🚀 Starting TEST RUN...")
@@ -90,18 +93,22 @@ def process_wiki_xml():
         print("Invalid choice. Exiting.")
         return
 
-    # Create output directory
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
 
-    # Context setup
-    context = ET.iterparse(INPUT_XML, events=("end",))
-    
+    # --- THE MAGIC: Open BZ2 Stream ---
+    # We open the BZ2 file and pass the stream to iterparse
+    try:
+        source_stream = bz2.open(INPUT_FILE, "rb")
+        context = ET.iterparse(source_stream, events=("end",))
+    except Exception as e:
+        print(f"❌ Error opening BZ2 file: {e}")
+        return
+
     count = 0
     current_shard_idx = 1
     current_shard_size = 0
     
-    # Open first file
     current_filename = get_shard_filename(current_shard_idx, is_test_mode)
     f_out = open(current_filename, "w", encoding="utf-8")
     print(f"📂 Writing to: {current_filename}")
@@ -117,8 +124,6 @@ def process_wiki_xml():
                     
                     if text_node is not None and text_node.text:
                         raw_text = text_node.text
-                        
-                        # Filter redirects and stubs
                         if not raw_text.strip().upper().startswith("#REDIRECT") and len(raw_text) > 200:
                             cleaned = clean_text(raw_text)
                             title = title_node.text if title_node.text else "Unknown"
@@ -128,29 +133,23 @@ def process_wiki_xml():
                                 data_block = header + cleaned
                                 f_out.write(data_block)
                                 
-                                # Update counters
                                 count += 1
                                 current_shard_size += len(data_block.encode('utf-8'))
 
                                 # --- CHECK LIMITS ---
-                                
-                                # 1. Test Mode Limit
                                 if is_test_mode and count >= TEST_ARTICLE_LIMIT:
-                                    print(f"\n🛑 Test limit reached ({TEST_ARTICLE_LIMIT} articles). Stopping.")
+                                    print(f"\n🛑 Test limit reached. Stopping.")
                                     break
                                 
-                                # 2. Shard Size Limit
                                 if not is_test_mode and current_shard_size >= SHARD_SIZE_LIMIT:
                                     f_out.close()
-                                    print(f"\n📦 Shard {current_shard_idx} full ({current_shard_size/1024/1024:.2f} MB).")
+                                    print(f"\n📦 Shard {current_shard_idx} full.")
                                     
-                                    # Partial Run Check
                                     if current_shard_idx >= max_shards:
-                                        print(f"🛑 Partial Run limit reached ({max_shards} shards). Stopping.")
+                                        print(f"🛑 Partial Run limit reached. Stopping.")
                                         elem.clear()
                                         break
 
-                                    # Prepare Next Shard
                                     current_shard_idx += 1
                                     current_shard_size = 0
                                     current_filename = get_shard_filename(current_shard_idx)
@@ -160,10 +159,9 @@ def process_wiki_xml():
                 elem.clear()
                 if hasattr(elem, 'getparent') and elem.getparent() is not None:
                      elem.getparent().remove(elem)
-    
-    # --- SAFETY NETS ---
+
     except ET.ParseError:
-        print("\n⚠️  XML Parse Error or End of File reached. Saving progress...")
+        print("\n⚠️  End of stream or file truncation. Saving progress...")
     except KeyboardInterrupt:
         print("\n🛑 User interrupted. Closing files safely...")
     except Exception as e:
@@ -172,12 +170,11 @@ def process_wiki_xml():
     finally:
         if not f_out.closed:
             f_out.close()
+        source_stream.close() # Close the BZ2 stream
         
     print("-" * 60)
     print(f"✅ DONE. Processed {count} articles.")
-    if is_test_mode:
-        print(f"👉 Test file: {os.path.join(OUTPUT_DIR, 'wiki_test_subset.txt')}")
-    else:
+    if not is_test_mode:
         print(f"👉 Generated {current_shard_idx} shards in: {OUTPUT_DIR}/")
 
 if __name__ == "__main__":
