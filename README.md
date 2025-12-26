@@ -43,7 +43,7 @@ Convert a raw XML dump (e.g., Wikipedia) into clean text.
 # Input: enwiki-latest-pages-articles.xml (25GB+)
 python prepare_wiki_dump.py
 # Output: large_dataset.txt (Cleaned Text)
-
+```
 ### Step 2: Ingest into Reservoir
 
 Convert the text into a Tiered Memory Reservoir (SSD-backed Vector DB). This uses a 2-pass streaming method to avoid RAM crashes.
@@ -51,14 +51,14 @@ Convert the text into a Tiered Memory Reservoir (SSD-backed Vector DB). This use
 ```bash
 python UFCE_ingestion_pipeline.py
 # Output: knowledge_base.dat (Binary Vectors) + metadata.txt (Index)
-
+```
 ### Step 3: Launch the Agent
 
 Connect the local LLM (via Ollama) to the reservoir.
 
 ```bash
 python UFCE_agent.py
-
+```
 ## 📂 Repository Contents
 
 ### 🧠 Core Framework
@@ -90,19 +90,19 @@ This repo is configured as a VS Code Dev Container — the easiest way to reprod
 ```bash
 python cyber_validation.py
 python blockchain_validation.py
-
+```
 **Run the Record-Breaking "God Mode" Benchmark:**
 
 ```bash
 python ufce_jax_god_mode_benchmark.py
-
+```
 **GPU Test (CUDA C++ Native):**
 
 ```bash
 # For RTX 40-series (Ada Lovelace)
 nvcc -o attention_gpu validate_attention.cu -O3 -arch=sm_89
 ./attention_gpu
-
+```
 ## 🧠 The "Cognitive Tax": Blind vs. Smart Processing
 
 We benchmarked the cost of introducing physics-informed decision logic into the kernel.
@@ -123,4 +123,16 @@ This project is open-source under the GNU General Public License v3.0 (GPLv3). T
 For proprietary software, closed-source applications, or enterprise use cases where GPLv3 compliance is not feasible (e.g., defense, proprietary robotics, closed banking systems), a Commercial License is available. This license waives the copyleft requirements and includes priority support.
 
 **Contact:** thoughttimemachinexr@gmail.com for enterprise inquiries.
+## 📚 Citation
 
+If you use the UFCE Streaming Kernels or the Infinite Context Agent in your research, please cite the framework:
+
+```bibtex
+@software{ufce_framework_2025,
+  author = {Thought Time Machine XR},
+  title = {The UniField Coupling Equation (UFCE) Framework: Zero-Memory Streaming Kernels},
+  year = {2025},
+  publisher = {Zenodo},
+  doi = {10.5281/zenodo.17906337},
+  url = {[https://github.com/thoughttimemachinexr/UFCE](https://github.com/thoughttimemachinexr/UFCE)}
+}
