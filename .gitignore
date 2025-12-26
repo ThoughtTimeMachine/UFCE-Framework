@@ -6,6 +6,22 @@ __pycache__/
 # C extensions
 *.so
 
+# Folders
+wiki_shards/
+knowledge_base/
+
+# Specific Data Files
+metadata_full.txt
+metadata.txt
+large_dataset.txt
+knowledge_base_full.dat
+
+# Compressed Files
+*.bz2
+
+# Specific Configuration/Environment Files
+requirements.txt
+
 # Distribution / packaging
 .Python
 build/
