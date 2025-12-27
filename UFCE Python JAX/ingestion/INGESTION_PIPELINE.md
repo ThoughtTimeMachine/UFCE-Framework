@@ -1,51 +1,50 @@
-# UFCE Ingestion Pipeline (`UFCE_ingestion_pipeline.py`)
+# UFCE Ingestion Pipeline (`ufce_ingestion_pipeline_shard.py` & `merge_shards.py`)
 
 ## Overview
-The `UFCE_ingestion_pipeline.py` is the data refinery of the UFCE framework. It transforms raw text into a **Tiered Memory Reservoir** consisting of a binary vector database (`knowledge_base.dat`) and a text metadata index (`metadata.txt`).
+The UFCE ingestion pipeline has been upgraded to a **sharded, resumable architecture** for handling truly massive datasets (e.g., full Wikipedia dumps, Common Crawl subsets, or multi-domain corpora). It consists of two scripts:
 
-This script implements the **"Zero-Memory" 2-Pass Architecture**, allowing it to process text datasets larger than available system RAM (e.g., 100GB+ on a 16GB laptop).
+- `ufce_ingestion_pipeline_shard.py`: Processes individual text shards into vector + metadata pairs.
+- `merge_shards.py`: Concatenates all shards into the final `knowledge_base_full.dat` and `metadata_full.txt` used by the UFCE agent.
 
----
-
-## The 2-Pass Architecture
-
-### Pass 1: The "Dry Run" (Indexing)
-* **Goal:** Calculate the exact number of chunks and generate the metadata file *without* loading text arrays into RAM.
-* **Mechanism:**
-    1.  Streams the input file line-by-line.
-    2.  Uses the `AutoTokenizer` (Hugging Face) to generate semantically valid chunks (max 256 tokens).
-    3.  Writes each chunk to `metadata.txt` immediately.
-    4.  Increments a counter `num_chunks`.
-* **Outcome:** We know exactly how large the vector database needs to be.
-
-### Pass 2: The "Vectorization" (Embedding)
-* **Goal:** Compute embeddings and write them to the SSD.
-* **Mechanism:**
-    1.  **Pre-Allocation:** Uses `numpy.memmap` to reserve space on the SSD for `(num_chunks, 384)` float32 matrix. This uses 0 RAM.
-    2.  **Streaming:** Re-opens the text file stream.
-    3.  **Batching:** Collects small batches (e.g., 64 chunks) in a temporary buffer.
-    4.  **GPU Encode:** Sends the batch to the GPU via `SentenceTransformer`.
-    5.  **Direct Write:** Flushes the resulting vectors directly to the `memmap` on disk.
-    6.  **Garbage Collection:** Clears the batch buffer immediately.
+This design enables **safe, parallel, and resumable** ingestion of datasets far larger than system RAM while maintaining the **Zero-Memory** philosophy.
 
 ---
 
-## Why It Is Superior
+## Sharded Workflow
 
-| Feature | Standard Approach | UFCE Pipeline Approach |
-| :--- | :--- | :--- |
-| **RAM Usage** | Grows with file size ($O(N)$) | Constant / Flat ($O(1)$) |
-| **Chunking** | Hard cuts (character count) | **Semantic Tokenizer** (Whole words) |
-| **Storage** | `pickle` / `faiss` (RAM heavy) | `numpy.memmap` (SSD / Virtual RAM) |
-| **Crash Risk** | High for >10GB files | Near Zero |
+## Preparing Wikipedia Input Shards
+The pipeline works best with the full English Wikipedia dump.
 
-## Logical Data Flow
+1. **Download the Dump**:
+   ```bash
+   wget https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-pages-articles.xml.bz2
 
+Extract Clean Text Shards (using WikiExtractor):
+Install WikiExtractor:bash
 
-`large_dataset.txt` $\rightarrow$ **Pass 1** $\rightarrow$ `metadata.txt` (Human Readable)
-$\downarrow$
-**Pass 2** (GPU)
-$\downarrow$
-`knowledge_base.dat` (Machine Readable / Binary)
+pip install wikiextractor
 
-This architecture ensures that the **UFCE Agent** always has a 1:1 mapping between row $N$ in the `.dat` file and line $N$ in the `.txt` file, enabling instant lossless retrieval.
+Run extraction to create the wiki_shards/ folder:bash
+
+WikiExtractor.py enwiki-latest-pages-articles.xml.bz2 --output wiki_shards/ -b 1M
+
+This produces multiple text files in wiki_shards/ (one per large article batch), ready for the ingestion pipeline.
+
+### 2. Run Sharded Ingestion (`ufce_ingestion_pipeline_shard.py`)
+```bash
+python ufce_ingestion_pipeline_shard.py
+
+Key Features:Resumable: Skips already-processed shards.
+Semantic Chunking: Uses Hugging Face tokenizer (256 tokens max) for high-quality chunks.
+Zero-Memory: Streams input, writes directly to memmap on disk.
+Progress Bars: tqdm for both passes.
+Output: One .dat + _meta.txt per shard in knowledge_base/.
+
+### 3. Merge Shards (merge_shards.py)
+```bash
+python merge_shards.py
+
+Key Features:Binary concatenation of .dat files (fast, zero-copy).
+Text concatenation of metadata.
+Output: Single knowledge_base_full.dat + metadata_full.txt ready for the UFCE agent.
+
