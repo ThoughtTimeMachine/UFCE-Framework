@@ -37,22 +37,86 @@ The **UFCE streaming kernel** eliminates the "Memory Wall" entirely — computin
 
 This repository includes a fully functional **"Drill-Down" AI Agent** capable of searching massive datasets (e.g., all of Wikipedia) on a consumer PC without using enterprise VRAM.
 
-### Step 1: Prepare the Data
-Convert a raw XML dump (e.g., Wikipedia) into clean text.
-```bash
-# Input: enwiki-latest-pages-articles.xml (25GB+)
-python prepare_wiki_dump.py
-# Output: large_dataset.txt (Cleaned Text)
-```
-### Step 2: Ingest into Reservoir
+### Step 1: Preparing Wikipedia Input Shards
+The pipeline works best with the full English Wikipedia dump.
 
-Convert the text into a Tiered Memory Reservoir (SSD-backed Vector DB). This uses a 2-pass streaming method to avoid RAM crashes.
+1. **Download the Dump**:
+   ```bash
+   wget https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-pages-articles.xml.bz2
+
+### Step 2: Prepare the Data
+
+1. **Extract Clean Text Shards (using WikiExtractor)**:
+```bash
+pip install wikiextractor
+```
+2. **Run extraction to create the wiki_shards/ folder**:
+```bash
+WikiExtractor.py enwiki-latest-pages-articles.xml.bz2 --output wiki_shards/ -b 1M
+```
+This produces multiple text files in wiki_shards/ (one per large article batch), ready for the ingestion pipeline.
+
+### Step 3: Ingest into Reservoir
+
+## Overview
+The UFCE ingestion pipeline has been upgraded to a **sharded, resumable architecture** for handling truly massive datasets (e.g., full Wikipedia dumps, Common Crawl subsets, or multi-domain corpora). It consists of two scripts:
+
+- `ufce_ingestion_pipeline_shard.py`: Processes individual text shards into vector + metadata pairs.
+- `merge_shards.py`: Concatenates all shards into the final `knowledge_base_full.dat` and `metadata_full.txt` used by the UFCE agent.
+
+This design enables **safe, parallel, and resumable** ingestion of datasets far larger than system RAM while maintaining the **Zero-Memory** philosophy.
+
+Convert the text into a Tiered Memory Reservoir (SSD-backed Vector DB). 
+The sharded pipeline processes Wikipedia articles in independent chunks, using streaming embedding per shard to avoid RAM overload on massive datasets.
 
 ```bash
 python UFCE_ingestion_pipeline.py
 # Output: knowledge_base.dat (Binary Vectors) + metadata.txt (Index)
 ```
-### Step 3: Launch the Agent
+### Step 4: Launch the Agent with Local LLM (Ollama)
+
+The UFCE agent connects to a running Ollama server to generate responses grounded in your knowledge base.
+
+You have **two options** for running Ollama — choose based on convenience and performance.
+
+#### Option 1: Ollama on Host Machine (Windows — Recommended for Speed & Ease)
+This is the fastest and simplest setup — Ollama runs natively on your Windows machine.
+Host version is faster (no container overhead, direct GPU access if using Ollama GPU build).
+
+1. **Install Ollama** (if not already):
+   - Download from https://ollama.com/download
+   - Run the installer.
+
+2. **Download Llama-3**:
+   ```bash
+   ollama pull llama3      # 8B model (fast, ~4.7GB)
+   # or
+   ollama pull llama3:70b  # 70B model (if you have 48GB+ RAM/VRAM)
+3. **Start the Model (in a separate CMD/PowerShell window)**:
+```bash
+ollama run llama3
+ ```
+Keep this window open — it runs the server on localhost:11434
+
+### Option 2: Ollama Inside Docker Container
+Use this if you want everything isolated in the container 
+
+1. **Add to your Dockerfile** (or run manually):
+```dockerfile
+# Install Ollama
+RUN curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull model (do this at build time or first run)
+RUN ollama pull llama3
+```
+2. **Start Ollama Server** in container background:
+```bash
+ollama serve &
+```
+3. **Update Agent URL**(in UFCE_agent.py):
+OLLAMA_URL = "http://localhost:11434/api/generate"
+
+### Step 5: Launch the Agent
 
 Connect the local LLM (via Ollama) to the reservoir.
 
