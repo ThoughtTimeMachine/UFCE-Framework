@@ -9,6 +9,9 @@ __pycache__/
 # Folders
 wiki_shards/
 knowledge_base/
+llama3_70b_weights/
+llama3_weights/
+opt_states/
 
 # Specific Data Files
 metadata_full.txt
