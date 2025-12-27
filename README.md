@@ -5,7 +5,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-yellow.svg)](https://www.python.org/)
 [![JAX](https://img.shields.io/badge/JAX-Accelerated-green.svg)](https://github.com/google/jax)
-[![Zenodo](https://zenodo.org/badge/DOI/10.5281/zenodo.17906337.svg)](https://zenodo.org/records/18012490)
+[![Zenodo](https://zenodo.org/badge/DOI/10.5281/zenodo.18055873.svg)](https://zenodo.org/records/18055873)
 
 ## 🚀 The Breakthrough
 
