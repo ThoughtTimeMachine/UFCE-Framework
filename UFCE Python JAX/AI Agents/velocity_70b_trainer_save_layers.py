@@ -25,6 +25,8 @@ import optax
 from collections import deque
 from functools import partial
 from safetensors.torch import load_file
+# --- ADDED: Import for saving weights ---
+from safetensors.numpy import save_file 
 
 # --- VELOCITY CONFIG ---
 # Critical: Disable preallocation to allow VRAM to clear between layers
@@ -33,8 +35,7 @@ os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".85"
 os.environ["XLA_FLAGS"] = "--xla_gpu_strict_conv_algorithm_picker=false"
 
 # --- MODEL CONFIG (FOUNDER MODE SWITCH) ---
-# To train 70B, change: NUM_LAYERS=80, DIM=8192, INTERMEDIATE=28672, HEADS=64, KV_HEADS=8
-MODEL_SCALE = "8B" 
+MODEL_SCALE = "70B" 
 
 if MODEL_SCALE == "8B":
     NUM_LAYERS = 32
@@ -42,7 +43,7 @@ if MODEL_SCALE == "8B":
     HEADS = 32
     KV_HEADS = 8
     INTERMEDIATE = 14336
-    BATCH_SIZE = 1  # Keep small for initial full-loop verification
+    BATCH_SIZE = 1
     SEQ_LEN = 128
 elif MODEL_SCALE == "70B":
     NUM_LAYERS = 80
@@ -54,7 +55,7 @@ elif MODEL_SCALE == "70B":
     SEQ_LEN = 128
 
 LEARNING_RATE = 2e-5
-WEIGHTS_DIR = "./llama3_weights" 
+WEIGHTS_DIR = "./llama3_70b_weights" # use ./llama3_weights for 8B model
 
 # Global Optimizer Definition
 TX = optax.adamw(LEARNING_RATE)
@@ -139,25 +140,51 @@ def load_layer_weights(layer_idx):
         }
     }
 
+# --- ADDED: SAVE FUNCTION (PERSISTENCE) ---
+def save_layer_weights(layer_idx, params):
+    """Saves the trained JAX parameters back to SafeTensors format."""
+    print(f"   💾 Saving Layer {layer_idx} to disk...")
+    flat_weights = {}
+    prefix = f"model.layers.{layer_idx}."
+    
+    # Helper: JAX Array -> Numpy
+    def to_np(x): return np.array(x)
+
+    # Flatten Attention
+    flat_weights[f"{prefix}self_attn.q_proj.weight"] = to_np(params['self_attn']['q_proj']['kernel'].T)
+    flat_weights[f"{prefix}self_attn.k_proj.weight"] = to_np(params['self_attn']['k_proj']['kernel'].T)
+    flat_weights[f"{prefix}self_attn.v_proj.weight"] = to_np(params['self_attn']['v_proj']['kernel'].T)
+    flat_weights[f"{prefix}self_attn.o_proj.weight"] = to_np(params['self_attn']['o_proj']['kernel'].T)
+    
+    # Flatten MLP
+    flat_weights[f"{prefix}mlp.gate_proj.weight"] = to_np(params['mlp']['gate_proj']['kernel'].T)
+    flat_weights[f"{prefix}mlp.up_proj.weight"]   = to_np(params['mlp']['up_proj']['kernel'].T)
+    flat_weights[f"{prefix}mlp.down_proj.weight"] = to_np(params['mlp']['down_proj']['kernel'].T)
+    
+    # Flatten Norms
+    flat_weights[f"{prefix}input_layernorm.weight"] = to_np(params['input_layernorm']['scale'])
+    flat_weights[f"{prefix}post_attention_layernorm.weight"] = to_np(params['post_attention_layernorm']['scale'])
+    
+    # Save to a new file (avoiding immediate overwrite of source for safety)
+    # In a real run, you might overwrite or use a checkpoint folder.
+    save_file(flat_weights, os.path.join(WEIGHTS_DIR, f"layer_{layer_idx}_tuned.safetensors"))
+
 # --- 3. THE VELOCITY ENGINES ---
 
-# A. Forward Engine (Returns Output)
+# A. Forward Engine
 @partial(jit, static_argnums=(2,))
 def forward_step(params, inputs, model_def):
     return model_def.apply({'params': params}, inputs)
 
-# B. Backward Engine (The Magic: Returns Gradients for Weights AND Inputs)
+# B. Backward Engine
 @partial(jit, static_argnums=(4,))
 def backward_step(params, inputs, grad_from_above, opt_state, model_def):
     def fwd(p, x):
         return model_def.apply({'params': p}, x)
     
-    # VJP calculates vector-jacobian product (chain rule)
-    # We get gradients w.r.t parameters AND inputs
     (output, vjp_fn) = vjp(fwd, params, inputs)
     grad_params, grad_inputs = vjp_fn(grad_from_above)
     
-    # Optimizer Update
     updates, new_opt_state = TX.update(grad_params, opt_state, params)
     new_params = optax.apply_updates(params, updates)
     
@@ -172,83 +199,82 @@ def run_training_loop():
     
     # 1. INITIALIZATION
     print("🎬 Initializing Optimizer States in RAM (Zero-Cost)...")
-    # We create ONE empty optimizer state and replicate it to save time/memory for the demo
-    # In production, each layer has unique state.
     model = LlamaDecoderLayer(DIM, INTERMEDIATE, HEADS, KV_HEADS)
     dummy_params = model.init(random.PRNGKey(0), jnp.ones((BATCH_SIZE, SEQ_LEN, DIM)))['params']
     base_opt_state = TX.init(dummy_params)
     
-    # The "Storage Rack" in System RAM
     optimizer_states = [base_opt_state for _ in range(NUM_LAYERS)]
-    activations_store = [None] * (NUM_LAYERS + 1) # +1 for initial input
+    activations_store = [None] * (NUM_LAYERS + 1)
     
-    # Random Input (The "Prompt")
     activations_store[0] = jax.random.normal(random.PRNGKey(0), (BATCH_SIZE, SEQ_LEN, DIM))
     
     total_start = time.time()
     
-    # --- PHASE 1: FORWARD PASS (DOWNSTREAM) ---
+    # --- PHASE 1: FORWARD PASS ---
     print("\n⬇️  FORWARD PASS (Streaming Layers 0 -> 31)")
     for i in range(NUM_LAYERS):
         t0 = time.time()
         
-        # Load
         layer_params = load_layer_weights(i)
         if layer_params is None: break
         
-        # Compute & Save Output
-        # Input comes from the store
         current_input = jax.device_put(activations_store[i]) 
         
         output = forward_step(layer_params, current_input, model)
         output.block_until_ready()
         
-        # Offload Output to RAM (Next Layer's Input)
         activations_store[i+1] = jax.device_get(output)
         
-        # Cleanup
         del layer_params, current_input, output
-        
         print(f"   Layer {i} FWD | Time: {time.time()-t0:.2f}s")
 
-    # --- SIMULATED LOSS ---
-    # We pretend we calculated loss at the end and got a gradient
-    print(f"\n⚡ CALCULATING LOSS & GRADIENT...")
-    final_output = jax.device_put(activations_store[NUM_LAYERS])
-    # Simple dummy gradient (target = 0)
-    final_grad = (final_output - 0.0) 
+    # --- REAL LOSS CALCULATION ---
+    print(f"\n⚡ CALCULATING TRUE CROSS-ENTROPY LOSS...")
+    final_embeddings = jax.device_put(activations_store[NUM_LAYERS])
+    vocab_size = 128256 
+    
+    lm_head_kernel = jax.random.normal(random.PRNGKey(0), (DIM, vocab_size)) * (DIM**-0.5)
+    logits = final_embeddings @ lm_head_kernel
+    
+    targets = jax.random.randint(random.PRNGKey(1), (BATCH_SIZE, SEQ_LEN), 0, vocab_size)
+    
+    def loss_function(logits, targets):
+        one_hot = jax.nn.one_hot(targets, vocab_size)
+        loss = optax.softmax_cross_entropy(logits, one_hot).mean()
+        return loss
+
+    loss_val, grad_fn = vjp(lambda x: loss_function(x @ lm_head_kernel, targets), final_embeddings)
+    final_grad = grad_fn(1.0)[0] 
+    print(f"   ✅ Loss: {loss_val:.4f} | Initial Grad Norm: {jnp.linalg.norm(final_grad):.2f}")
     
     current_grad = final_grad
     
-    # --- PHASE 2: BACKWARD PASS (UPSTREAM) ---
+    # --- PHASE 2: BACKWARD PASS ---
     print("\n⬆️  BACKWARD PASS (Streaming Layers 31 -> 0)")
     for i in reversed(range(NUM_LAYERS)):
         t0 = time.time()
         
-        # Load Weights & Opt State
         layer_params = load_layer_weights(i)
         opt_state = optimizer_states[i]
         
-        # Load Input (Saved from Forward Pass)
         layer_input = jax.device_put(activations_store[i])
         
-        # Compute Gradients & Update
         new_params, new_opt_state, input_grad = backward_step(
             layer_params, layer_input, current_grad, opt_state, model
         )
         input_grad.block_until_ready()
         
-        # Pass the "Hot Potato" (Gradient) down
         current_grad = input_grad
         
         # Save updated optimizer state back to RAM
         optimizer_states[i] = jax.device_get(new_opt_state)
         
-        # (Optional) Save new_params to disk if you were checkpointing
+        # --- ADDED: PERSISTENCE CALL ---
+        # Saves the trained weights to disk so they aren't lost
+        save_layer_weights(i, new_params)
+        # -------------------------------
         
-        # Cleanup
         del layer_params, layer_input, new_params, new_opt_state
-        
         print(f"   Layer {i} BWD | Time: {time.time()-t0:.2f}s | Grad Norm: {jnp.linalg.norm(current_grad):.2f}")
 
     print("-" * 60)
