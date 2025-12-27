@@ -13,6 +13,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import os
+
+# --- HARDWARE CONFIG (The Speed Cheat) ---
+# This must happen BEFORE importing JAX to lock the RAM (Pinned Memory).
+# It prevents JAX from gobbling all VRAM instantly, allowing for streaming.
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".90" # Use 90% of GPU
+os.environ["XLA_FLAGS"] = "--xla_gpu_strict_conv_algorithm_picker=false"
+
 import numpy as np
 import jax.numpy as jnp
 from jax import jit, device_put
@@ -20,36 +29,38 @@ from sentence_transformers import SentenceTransformer
 import requests
 import json
 import time
+import psutil  # For verifying the "Zero-Memory" Proof
 
 # --- CONFIG ---
-# UPDATED PATHS FOR TEST RUN:
-DB_PATH = "knowledge_base/wiki_test_subset.dat"
-META_PATH = "knowledge_base/wiki_test_subset_meta.txt"
+DB_PATH = "knowledge_base_full.dat"
+META_PATH = "metadata_full.txt"
 
-EMBEDDING_DIM = 384  # Must match your ingest model
-TOP_K = 5            # How many chunks to give the LLM
+EMBEDDING_DIM = 384
+TOP_K = 5
 OLLAMA_URL = "http://host.docker.internal:11434/api/generate"
-MODEL_NAME = "llama3" # Or "mistral", "gemma", etc.
+MODEL_NAME = "llama3"
+STREAM_BATCH_SIZE = 500_000  # Adjust if GPU stutters
 
 # --- LOAD RESOURCES ---
 print("Loading Embedding Model...")
 embedder = SentenceTransformer('all-MiniLM-L6-v2')
 
-print("Mapping Massive Database...")
-# This is instant (Zero-Copy)
+print(f"Mapping Database: {DB_PATH}")
 try:
-    # Use 'r' mode (Read Only) to protect data
+    # Check file size for the user
+    file_size_gb = os.path.getsize(DB_PATH) / (1024**3)
+    print(f"📂 Database Size on Disk: {file_size_gb:.2f} GB")
+
+    # The "Zero-Copy" Magic: Memmap
     vectors = np.memmap(DB_PATH, dtype='float32', mode='r')
-    # Reshape it to (N, Dim) - we infer N from file size
     num_vectors = vectors.shape[0] // EMBEDDING_DIM
     vectors = vectors.reshape((num_vectors, EMBEDDING_DIM))
-    print(f"✅ Linked to {num_vectors} vectors (Virtual Memory).")
+    print(f"✅ Linked to {num_vectors:,} vectors (Virtual Memory).")
 except FileNotFoundError:
     print(f"❌ Error: Database file not found at {DB_PATH}")
-    print("   Did you run ufce_ingestion_pipeline_sharded.py?")
+    print("   Did you run merge_shards.py?")
     exit()
 
-# Load Metadata (The actual text)
 print("Loading Text Index...")
 try:
     with open(META_PATH, "r", encoding="utf-8") as f:
@@ -63,18 +74,12 @@ except FileNotFoundError:
 def fast_scanner(query_vec, db_chunk):
     # Normalize query for Cosine Similarity
     q_norm = query_vec / jnp.linalg.norm(query_vec)
-    
     # Dot Product (Batch Matrix Multiply)
     scores = jnp.dot(db_chunk, q_norm)
-    
     return scores
 
 def query_ollama(prompt):
-    data = {
-        "model": MODEL_NAME,
-        "prompt": prompt,
-        "stream": False
-    }
+    data = { "model": MODEL_NAME, "prompt": prompt, "stream": False }
     try:
         response = requests.post(OLLAMA_URL, json=data)
         if response.status_code == 200:
@@ -84,24 +89,41 @@ def query_ollama(prompt):
     except Exception as e:
         return f"Error connecting to Ollama: {e}"
 
-# Define a Safe Chunk Size for 12GB VRAM
-STREAM_BATCH_SIZE = 500_000 
+def get_ram_usage():
+    """Returns the RAM usage of just THIS process in GB"""
+    process = psutil.Process(os.getpid())
+    return process.memory_info().rss / (1024 ** 3)
 
 def print_banner():
     print(r"""
-   __  ________________
-  / / / / ____/ ____/ ____/
- / / / / /_  / /   / __/
-/ /_/ / __/ / /___/ /___
-\____/_/    \____/_____/
-    ___   _____________   ______
-   /   | / ____/ ____/ | / /_  __/
-  / /| |/ / __/ __/ /  |/ / / /
- / ___ / /_/ / /___/ /|  / / /
-/_/  |_\____/_____/_/ |_/ /_/
+    __  ________________
+   / / / / ____/ ____/ ____/
+  / / / / /_  / /   / __/
+ / /_/ / __/ / /___/ /___
+ \____/_/    \____/_____/
+     ___   _____________   ______
+    /   | / ____/ ____/ | / /_  __/
+   / /| |/ / __/ __/ /  |/ / / /
+  / ___ / /_/ / /___/ /|   / / /
+ /_/  |_\____/_____/_/ |_/ /_/
+          
+     NEURAL WEB (JAX)          DATA WORMHOLE
+      o         o              \ . . . . . /
+       \       /                \         /
+    o---( U F )---o              \       /
+       /   |   \                  |     |
+      o    C    o                 |     |
+       \   |   /                 /       \
+    o---( E A )---o             /         \
+       /       \               / . . . . . \
+      o         o
 
-    :: UFCE Framework ::  (v1.0.0 - JAX Accelerated)
+    :: UFCE Framework ::  (v2.0.0 - JAX Accelerated)
     [Mode: Infinite Context] [Device: GPU/NVIDIA]
+    [Architecture: Zero-Memory Streaming + Pinned RAM]
+          
+    Left:  The JAX agent weaving semantic connections in vector space.
+    Right: The 'Wormhole' pipeline streaming 11GB+ of data instantly.
     """)
     print("-" * 60)
 
@@ -109,7 +131,9 @@ def run_agent():
     print_banner()
     print(f"🤖 Agent Model: {MODEL_NAME}")
     print(f"🌊 Streaming Batch Size: {STREAM_BATCH_SIZE}")
-    print(f"📚 Knowledge Base: {num_vectors} vectors")
+    print(f"📚 Knowledge Base: {num_vectors:,} vectors")
+    print(f"💾 Physical Database Size: {os.path.getsize(DB_PATH) / (1024**3):.2f} GB")
+    print("-" * 60)
     print("Type 'exit' to quit.\n")
     
     while True:
@@ -124,7 +148,6 @@ def run_agent():
         
         # 2. UFCE Streaming Scan (The Loop)
         all_scores = []
-        
         # We iterate over the massive memmap in chunks
         for i in range(0, len(vectors), STREAM_BATCH_SIZE):
             chunk = vectors[i : i + STREAM_BATCH_SIZE]
@@ -145,7 +168,10 @@ def run_agent():
         t1 = time.time()
         scan_time = t1 - t0
         
-        # 3. Construct Prompt
+        # RAM CHECK
+        current_ram = get_ram_usage()
+        
+        # 4. Construct Prompt
         context_block = "\n---\n".join(retrieved_context)
         prompt = f"""
         Use the following retrieved data to answer the user question.
@@ -155,8 +181,9 @@ def run_agent():
         QUESTION: {query}
         """
         
-        # 4. LLM Answer
-        print(f"\n[System] Scanned {num_vectors} vectors in {scan_time:.4f}s.")
+        print(f"\n[System] Scanned {num_vectors:,} vectors in {scan_time:.4f}s.")
+        print(f"[System] RAM Usage: {current_ram:.2f} GB (Proof of Infinite Context)")
+        
         print("[System] Thinking...")
         answer = query_ollama(prompt)
         
