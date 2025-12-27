@@ -128,16 +128,29 @@ python UFCE_agent.py
 ### 🧠 Core Framework
 - `ufce_jax_god_mode_benchmark.py` — The Record Breaker. Runs the "God Mode" block-streaming kernel (2.02T ops/s).
 - `ufce_jax_real_world_measurements.py` — The Real World. Runs the Streaming Softmax (LLM) and Top-K (Security) kernels.
-- `ufce_attention_core.py` — The Engine. The pure JAX logic for the agent.
+- `ufce_attention_core.py` — **Legacy** — Early prototype for attention logic (now integrated into agent and trainers).
 
-### 🛠️ Utilities & Agent
-- `prepare_wiki_dump.py` — Streaming XML cleaner for massive datasets.
-- `UFCE_ingestion_pipeline.py` — "Zero-Memory" vector database creator.
-- `UFCE_agent.py` — The interactive AI interface.
+### 🛠️ Ingestion Pipeline (Sharded & Resumable)
+- `ufce_ingestion_pipeline_shard.py` — Processes individual Wikipedia shards into vector + metadata pairs (resumable, semantic chunking).
+- `merge_shards.py` — Concatenates all shards into the final `knowledge_base_full.dat` + `metadata_full.txt`.
+- `prepare_wiki_dump.py` — **Deprecated** — Legacy single-file processor (use WikiExtractor instead).
+
+### 🚀 Training & Acceleration (VELOCITY)
+- `velocity_70b_trainer_save_layers.py` — Full trainer with weight persistence (70B-capable).
+- `velocity_8b_trainer_save_layers.py` — 8B version with saving.
+- `velocity_8b_hybrid_trainer_save_layers.py` — Hybrid with RAM cache and periodic checkpoints.
+- `velocity_8b_hybrid_trainer_save_layers_less_128GB_ram.py` — Disk-offload optimizer state for lower RAM systems.
+
+### 🤖 Agent & Demo
+- `UFCE_agent.py` — The interactive RAG agent with infinite-context retrieval over the knowledge base.
 
 ### 📜 Legacy & Docs
 - `paper/` — Full academic preprint (LaTeX + PDF).
 - `validate_attention.cu` — Optimized CUDA C++ kernels.
+
+### 📊 Benchmarks & Legacy Demos
+- `test_search.py` — Simple interactive vector search demo on a test subset (loads memmap vectors + metadata, performs cosine similarity search with SentenceTransformer).
+- `ufce_layer_swapper.py` — **Legacy Demo** — Early proof-of-concept showing a 32GB model forward pass on 12GB VRAM (~25s total). Superseded by full trainers.
 
 ## 🛠️ Quick Start (VS Code Dev Container)
 
@@ -149,7 +162,7 @@ This repo is configured as a VS Code Dev Container — the easiest way to reprod
 
 ### Run the Benchmarks
 
-**CPU Tests** (inside container terminal):
+**CPU Tests** (inside container terminal from UFCE Algorithms python C++ folder):
 
 ```bash
 python cyber_validation.py
@@ -160,7 +173,7 @@ python blockchain_validation.py
 ```bash
 python ufce_jax_god_mode_benchmark.py
 ```
-**GPU Test (CUDA C++ Native):**
+**GPU Test (CUDA C++ Native):** (UFCE Algorithm CUDA folder)
 
 ```bash
 # For RTX 40-series (Ada Lovelace)
@@ -178,38 +191,34 @@ We benchmarked the cost of introducing physics-informed decision logic into the 
 
 **Conclusion:** For maximum raw power, use the Blind Kernel. For energy-efficient robotics (where you want to idle the GPU during low-flux), use the Cognitive Kernel.
 
-## ⚖️ Licensing & Commercial Use
-
-### Open Source License
-This project is open-source under the GNU General Public License v3.0 (GPLv3). This ensures that the core framework remains free for researchers, students, and open-source projects.
-
 ## ⚡ Project VELOCITY: Breaking the 12GB VRAM Barrier
 
 While traditional training requires the entire model to fit in VRAM, **Project VELOCITY** implements a **Layer-Wise Swapper**. This treats your System RAM (DDR5) as a high-speed L4 cache and your GPU VRAM as a dedicated compute core.
 
-
-
 ### The "Infinite Model" Benchmark
-We successfully executed a **32GB Model (Full FP32 Llama-3-8B)** on a single **12GB RTX 4070 Ti** with near-zero compute starvation.
+We successfully executed a **32GB Model (Llama-3-8B equivalent)** on a single **12GB RTX 4070 Ti** with near-zero compute starvation.
 
 | Metric | Achievement | Impact |
 | :--- | :--- | :--- |
-| **Model Size** | **32 GB** | 3x larger than physical VRAM capacity. |
-| **Layer Latency** | **0.78s** | Transfer + Compute happens in sub-second timeframes. |
-| **Effective Throughput** | **512 GB/s** | Saturates the PCIe bus via Quad-Buffered Ring Pipelining. |
-| **Training Capability** | **Full-Parameter** | No quantization (4-bit) required; trains at 100% precision. |
+| **Model Size** | **32 GB** (FP32/BF16) | 2.7x larger than physical VRAM capacity. |
+| **Layer Latency** | **~0.78–0.94s** (forward) | Sub-second per layer with real weights. |
+| **Effective Throughput** | **37.5M tokens/sec** (empirical) | Up to 512 GB/s theoretical with 4-bit transport. |
+| **Training Capability** | **Full backpropagation** | Real forward + backward passes; persistent fine-tuning possible. |
 
 ### 🔬 How it Works: The Quad-Buffered Ring Pipeline
-Project VELOCITY eliminates the "Stop-and-Go" latency of standard data loading. By using **4-zone asynchronous DMA**, the system "teleports" the next layer into the GPU while the current layer is still being computed.
+Project VELOCITY eliminates the "Stop-and-Go" latency of standard data loading. By using **4-zone asynchronous DMA**, the system "teleports" the next layer into the GPU while the current layer is computing.
 
-
-
-1. **Ingest:** Fetches the next layer from System RAM.
-2. **Pin/Feed:** Pages the memory into a "Page-Locked" DMA zone.
-3. **Compute:** The GPU executes the forward/backward pass.
-4. **Writeback:** Updates gradients and clears the VRAM for the next incoming layer.
+1. **Ingest:** Fetches the next layer from the L4 Cache (System RAM) or falls back to Storage (SSD).
+2. **Tokenize/Prepare:** Prepares data (optional). Bitcasts or formats the tensor (e.g., Int16 View) for optimal transport.
+3. **Pin/Feed:** Pages the memory into a "Page-Locked" DMA zone to trigger a direct Asynchronous DMA transfer across the PCIe bus.
+4. **Compute:** The GPU executes the forward/backward pass. This is the only moment the layer occupies VRAM
+5. **Writeback:** Updates gradients and clears the VRAM for the next incoming layer.
 
 ---
+## ⚖️ Licensing & Commercial Use
+
+### Open Source License
+This project is open-source under the GNU General Public License v3.0 (GPLv3). This ensures that the core framework remains free for researchers, students, and open-source projects.
 
 ### Commercial Licensing
 For proprietary software, closed-source applications, or enterprise use cases where GPLv3 compliance is not feasible (e.g., defense, proprietary robotics, closed banking systems), a Commercial License is available. This license waives the copyleft requirements and includes priority support.
