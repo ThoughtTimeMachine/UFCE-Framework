@@ -24,3 +24,7 @@ requests==2.32.3
 
 # JAX (We only ask for the version, the tool gets the rest)
 jax[cuda12_pip]==0.4.31
+
+# Velocity Trainer Architecture (Phase 2)
+flax==0.8.5      # Neural Network Library (Compatible with JAX 0.4.31)
+optax==0.2.3     # Gradient Processing & Optimization
