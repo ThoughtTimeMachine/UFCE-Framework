@@ -18,6 +18,7 @@ metadata_full.txt
 metadata.txt
 large_dataset.txt
 knowledge_base_full.dat
+requirements.txt
 
 # Compressed Files
 *.bz2
