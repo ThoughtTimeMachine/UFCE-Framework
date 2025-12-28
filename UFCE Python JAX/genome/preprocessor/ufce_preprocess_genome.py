@@ -37,7 +37,7 @@ def load_config():
         print(f"❌ Error: '{dataset_key}' not in config.")
         exit()
          
-    return data["datasets"]["genome"]
+    return data["datasets"][dataset_key]
 
 cfg = load_config()
 prep_cfg = cfg.get("preprocessing", {})
