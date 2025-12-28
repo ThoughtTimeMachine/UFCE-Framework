@@ -13,57 +13,82 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import os
-
 # --- HARDWARE CONFIG (The Speed Cheat) ---
 # This must happen BEFORE importing JAX to lock the RAM (Pinned Memory).
 # It prevents JAX from gobbling all VRAM instantly, allowing for streaming.
 
 import os
 import glob
-import shutil
+import numpy as np
+import json
+from tqdm import tqdm
 
-# --- CONFIG ---
-KB_DIR = "knowledge_base"
-OUTPUT_DAT = "knowledge_base_full.dat"
-OUTPUT_META = "metadata_full.txt"
+# --- LOAD CONFIGURATION ---
+CONFIG_FILE = "velocity_config.json"
+
+def load_config():
+    with open(CONFIG_FILE, 'r') as f:
+        data = json.load(f)
+    dataset_key = data["active_dataset"]
+    print(f"🔧 Loaded Config: {dataset_key} ({data['datasets'][dataset_key]['description']})")
+    return data["datasets"][dataset_key]
+
+cfg = load_config()
+
+# --- DYNAMIC CONFIG ---
+KB_DIR = cfg["vectors_output_dir"]
+OUTPUT_DAT = os.path.join(KB_DIR, cfg["final_dat_name"])
+OUTPUT_META = os.path.join(KB_DIR, cfg["final_meta_name"])
+EMBEDDING_DIM = cfg["embedding_dim"]
 
 def merge_database():
-    print("🚧 Starting Knowledge Base Merger...")
-    
-    # 1. Find all parts
-    # We look for files ending in .dat (but NOT the full one we are about to create)
-    dat_files = sorted([f for f in glob.glob(os.path.join(KB_DIR, "*.dat")) 
-                        if "full.dat" not in f and "wiki_test" not in f])
-    
-    meta_files = sorted([f for f in glob.glob(os.path.join(KB_DIR, "*_meta.txt")) 
-                         if "full.txt" not in f and "wiki_test" not in f])
+    print(f"🚀 UFCE Database Merger")
+    print(f"📂 Input Source: {KB_DIR}")
+    print(f"💾 Output Target: {OUTPUT_DAT}")
 
-    if len(dat_files) != len(meta_files):
-        print("❌ Error: Mismatch between .dat and .txt files. Re-run ingestion.")
+    # 1. Find all processed vector shards
+    vec_files = sorted(glob.glob(os.path.join(KB_DIR, "*.vec.npy")))
+    meta_files = sorted(glob.glob(os.path.join(KB_DIR, "*.meta")))
+
+    if len(vec_files) == 0:
+        print("❌ No vector shards found! Run ingestion_pipeline.py first.")
         return
 
-    print(f"Found {len(dat_files)} shards to merge.")
+    # 2. Calculate Total Size
+    total_vectors = 0
+    print("Scanning shards...")
+    for f in vec_files:
+        # Quick header read to get shape without loading data
+        shape = np.load(f, mmap_mode='r').shape
+        total_vectors += shape[0]
 
-    # 2. Merge Vectors (Binary Concatenation)
-    print("Merging Vectors...")
-    with open(OUTPUT_DAT, 'wb') as outfile:
-        for fname in dat_files:
-            print(f"  -> Adding {os.path.basename(fname)}")
-            with open(fname, 'rb') as infile:
-                shutil.copyfileobj(infile, outfile)
+    print(f"∑ Total Vectors: {total_vectors:,}")
+    
+    # 3. Create/Overwrite the massive .dat file (Memmap)
+    # Mode 'w+' creates a new file or overwrites existing
+    print("Allocating disk space...")
+    fp = np.memmap(OUTPUT_DAT, dtype='float32', mode='w+', shape=(total_vectors, EMBEDDING_DIM))
+    
+    # 4. Stream chunks into the big file
+    current_idx = 0
+    print("Streaming vectors...")
+    for f in tqdm(vec_files):
+        data = np.load(f)
+        n = data.shape[0]
+        fp[current_idx : current_idx + n] = data
+        current_idx += n
+        
+    fp.flush() # Ensure write to disk
+    print("✅ Vector database merged.")
 
-    # 3. Merge Metadata (Text Concatenation)
-    print("Merging Text Index...")
-    with open(OUTPUT_META, 'w', encoding="utf-8") as outfile:
-        for fname in meta_files:
-            with open(fname, 'r', encoding="utf-8") as infile:
-                shutil.copyfileobj(infile, outfile)
-
-    print("-" * 50)
-    print(f"✅ FINAL DATABASE READY: {OUTPUT_DAT}")
-    print(f"✅ FINAL METADATA READY: {OUTPUT_META}")
-    print("🚀 You can now point 'ufce_agent.py' to these files!")
+    # 5. Merge Metadata (Text)
+    print("Merging metadata...")
+    with open(OUTPUT_META, 'w', encoding='utf-8') as outfile:
+        for f in tqdm(meta_files):
+            with open(f, 'r', encoding='utf-8') as infile:
+                outfile.write(infile.read())
+                
+    print(f"✅ Full Knowledge Base Created at: {OUTPUT_DAT}")
 
 if __name__ == "__main__":
     merge_database()

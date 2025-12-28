@@ -16,22 +16,50 @@
 import os
 import sys
 import re
-# --- PATH SETUP ---
-# 1. Get the Project Root (one level up from this script)
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+import json # Required to read the config
 
-# 2. Add Root to Python Path so we can see the 'ai_agents' folder
+# --- PATH SETUP ---
+# 1. Get the directory where this script lives
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
+# 2. Go up TWO levels to find the true Project Root
+#    Current: .../genome/genome_search/
+#    Root:    .../
+project_root = os.path.abspath(os.path.join(script_dir, '..', '..'))
+
+# 3. Add Root to Python Path so we can see the 'ai_agents' folder
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-# --- IMPORT ---
-# Using the path you confirmed works:
+# --- IMPORT AGENT ---
 from ai_agents.ufce_agent import UFCEAgent
 
-# --- CONFIGURATION ---
-# Points to: Project_Root/knowledge_base_genome/...
-DB_PATH = os.path.join(project_root, "knowledge_base_genome", "knowledge_base_full_ecoli.dat")
-META_PATH = os.path.join(project_root, "knowledge_base_genome", "metadata_full_ecoli.txt")
+# --- CONFIGURATION LOADER ---
+CONFIG_FILE = os.path.join(project_root, "velocity_config.json")
+
+def get_genome_paths():
+    """Reads velocity_config.json to find the exact location of the E. coli DB."""
+    if not os.path.exists(CONFIG_FILE):
+        raise FileNotFoundError(f"❌ Config file not found at: {CONFIG_FILE}")
+        
+    with open(CONFIG_FILE, 'r') as f:
+        data = json.load(f)
+        
+    # We specifically target the 'genome' block because this is the genome demo.
+    # This ensures it works even if 'active_dataset' is set to 'wiki'.
+    if "genome" not in data.get("datasets", {}):
+        raise ValueError("❌ 'genome' dataset block is missing in velocity_config.json")
+        
+    cfg = data["datasets"]["genome"]
+    
+    # Construct absolute paths
+    # vectors_output_dir is relative to project_root (e.g. "knowledge_base_genome")
+    kb_dir = os.path.join(project_root, cfg["vectors_output_dir"])
+    
+    db_path = os.path.join(kb_dir, cfg["final_dat_name"])
+    meta_path = os.path.join(kb_dir, cfg["final_meta_name"])
+    
+    return db_path, meta_path
 
 # Keywords that trigger a larger context window (1500 chars)
 BIO_KEYWORDS = ["operon", "array", "gene", "promoter", "sequence", "cluster", "cassette", "island"]
@@ -46,9 +74,18 @@ YELLOW = "\033[93m"
 # --- DEMO FUNCTION ---
 def run_genome_search_demo():
     print(f"{BOLD}🚀 UFCE Genomic Search Demo{RESET}")
-    print(f"📂 Targeting DB: {DB_PATH}")
+    
+    # 1. Load Paths Dynamically
+    try:
+        DB_PATH, META_PATH = get_genome_paths()
+        print(f"📂 Targeting DB: {DB_PATH}")
+    except Exception as e:
+        print(e)
+        return
+
     print("Loading genomic knowledge base...")
     
+    # 2. Initialize Agent
     try:
         agent = UFCEAgent(
             db_path=DB_PATH, 
@@ -58,10 +95,12 @@ def run_genome_search_demo():
         print(f"{CYAN}✅ Knowledge base loaded successfully!{RESET}\n")
     except Exception as e:
         print(f"\n❌ Error loading knowledge base: {e}")
+        print(f"   Debug: Project Root detected as: {project_root}")
         return
     
     print("Ready! Ask about genes, mutations, sequences, etc. (type 'quit' to exit)\n")
     
+    # 3. Search Loop
     while True:
         query = input(f"{BOLD}🧬 Your genomic query: {RESET}").strip()
         
@@ -124,7 +163,8 @@ def run_genome_search_demo():
                     display_text = snippet[:window_size] + "..."
 
                 # --- HIGHLIGHTING ---
-                highlighted = pattern.sub(f"{RED}{BOLD}\g<0>{RESET}", display_text)
+                # Raw string (r"") prevents SyntaxWarning
+                highlighted = pattern.sub(rf"{RED}{BOLD}\g<0>{RESET}", display_text)
                 
                 print(f"{i}. {highlighted}\n")
                 
