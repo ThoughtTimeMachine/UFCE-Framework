@@ -1,0 +1,31 @@
+{
+    "active_dataset": "genome",
+    "datasets": {
+        "genome": {
+            "description": "E. coli Genomic Data",
+            "shards_input_dir": "genome/shards/ecoli_shards",
+            "vectors_output_dir": "genome/knowledge_base_genome",
+            "final_dat_name": "knowledge_base_full_ecoli.dat",
+            "final_meta_name": "metadata_full_ecoli.txt",
+            "max_tokens": 256,
+            "embedding_dim": 384,
+            "batch_size": 64,
+            "preprocessing": {
+                "fasta_url": "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/005/845/GCF_000005845.2_ASM584v2/GCF_000005845.2_ASM584v2_genomic.fna.gz",
+                "raw_data_dir": "genome/genome_data",
+                "raw_filename": "ecoli_mg1655.fna.gz",
+                "preprocessed_filename": "ecoli_genome.txt"
+            }
+        },
+        "wiki": {
+            "description": "Wikipedia English Dump",
+            "shards_input_dir": "wiki/shards/wiki_shards",
+            "vectors_output_dir": "wiki/knowledge_base_wiki",
+            "final_dat_name": "knowledge_base_full.dat",
+            "final_meta_name": "metadata_full.txt",
+            "max_tokens": 512,
+            "embedding_dim": 384,
+            "batch_size": 128
+        }
+    }
+}
