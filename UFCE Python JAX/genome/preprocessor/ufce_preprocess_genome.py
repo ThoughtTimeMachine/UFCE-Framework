@@ -32,9 +32,10 @@ def load_config():
     
     # We specifically need the genome dataset config for this script
     # regardless of what 'active_dataset' is set to, though usually they match.
-    if "genome" not in data["datasets"]:
-         print("❌ Error: 'genome' dataset block missing in config.")
-         exit()
+    dataset_key = data["active_dataset"]
+    if dataset_key not in data["datasets"]:
+        print(f"❌ Error: '{dataset_key}' not in config.")
+        exit()
          
     return data["datasets"]["genome"]
 
@@ -46,7 +47,7 @@ if not prep_cfg:
     exit()
 
 # --- DYNAMIC CONFIG ---
-FASTA_URL = prep_cfg["fasta_url"]
+DOWNLOAD_URL = prep_cfg["download_url"]
 GENOME_DATA_DIR = prep_cfg["raw_data_dir"]
 SHARDS_DIR = cfg["shards_input_dir"] # This is where the output goes so ingestion can find it
 
@@ -65,10 +66,10 @@ def preprocess_genome():
     # --- STEP 1: Download if missing ---
     if not os.path.exists(INPUT_GZ):
         print(f"\n⬇️ Downloading genome from NCBI...")
-        print(f"   URL: {FASTA_URL}")
+        print(f"   URL: {DOWNLOAD_URL}")
         
         try:
-            response = requests.get(FASTA_URL, stream=True)
+            response = requests.get(DOWNLOAD_URL, stream=True)
             response.raise_for_status()
             
             total_size = int(response.headers.get('content-length', 0))

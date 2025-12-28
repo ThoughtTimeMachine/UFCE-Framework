@@ -1,5 +1,5 @@
 {
-    "active_dataset": "genome",
+    "active_dataset": "human_genome",
     "datasets": {
         "genome": {
             "description": "E. coli Genomic Data",
@@ -11,7 +11,7 @@
             "embedding_dim": 384,
             "batch_size": 64,
             "preprocessing": {
-                "fasta_url": "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/005/845/GCF_000005845.2_ASM584v2/GCF_000005845.2_ASM584v2_genomic.fna.gz",
+                "download_url": "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/005/845/GCF_000005845.2_ASM584v2/GCF_000005845.2_ASM584v2_genomic.fna.gz",
                 "raw_data_dir": "genome/genome_data",
                 "raw_filename": "ecoli_mg1655.fna.gz",
                 "preprocessed_filename": "ecoli_genome.txt"
@@ -26,6 +26,22 @@
             "max_tokens": 512,
             "embedding_dim": 384,
             "batch_size": 128
+        },
+        "human_genome": {
+            "description": "GRCh38 Human Genome Reference",
+            "shards_input_dir": "genome/shards/human_shards",
+            "vectors_output_dir": "genome/knowledge_base/human_vectors",
+            "final_dat_name": "knowledge_base_full.dat",
+            "final_meta_name": "metadata_full.txt",
+            "max_tokens": 512,
+            "embedding_dim": 384,
+            "batch_size": 64,
+            "preprocessing": {
+                "download_url": "ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_full_analysis_set.fna.gz",
+                "raw_data_dir": "genome_data_human",
+                "raw_filename": "grch38.fna.gz",
+                "preprocessed_filename": "human_genome.txt"
+            }
         }
     }
 }
