@@ -132,32 +132,34 @@ def process_single_shard(shard_path):
     
     return True
 
-def run_ingestion_pipeline():
+from multiprocessing import Pool, cpu_count
+
+def run_ingestion_pipeline(parallel=True):
+    """Main entry point — supports both parallel and single-threaded modes."""
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
 
-    # Find all shards (Assumes .txt files)
     shard_files = sorted(glob.glob(os.path.join(SHARDS_DIR, "*.txt")))
     
     if not shard_files:
         print(f"❌ No shards found in '{SHARDS_DIR}'. Check your config or folder.")
         return
 
-    print(f"Found {len(shard_files)} shards. Starting Pipeline...")
-    print("This script can be stopped (Ctrl+C) and restarted safely.\n")
+    print(f"Found {len(shard_files)} shards.")
 
-    total_processed = 0
-    for shard in shard_files:
-        try:
-            was_processed = process_single_shard(shard)
-            if was_processed:
-                total_processed += 1
-        except Exception as e:
-            print(f"\n❌ Error processing {shard}: {e}")
-            continue
+    if parallel and len(shard_files) > 1:
+        print(f"🚀 Running in parallel on {cpu_count()} cores...")
+        with Pool(cpu_count()) as pool:
+            # Use imap for ordered progress bar
+            list(tqdm(pool.imap(process_single_shard, shard_files), 
+                      total=len(shard_files), desc="Overall Progress", unit="shard"))
+    else:
+        print("Running single-threaded...")
+        for shard in tqdm(shard_files, desc="Processing Shards", unit="shard"):
+            process_single_shard(shard)
 
     print("-" * 50)
-    print(f"✅ Job Complete. Processed {total_processed} new shards.")
+    print("✅ Ingestion complete!")
 
 if __name__ == "__main__":
-    run_ingestion_pipeline()
+    run_ingestion_pipeline(parallel=True)  # Default to parallel
