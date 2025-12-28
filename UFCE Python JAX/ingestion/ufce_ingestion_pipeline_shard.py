@@ -21,8 +21,9 @@ from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer
 from tqdm import tqdm
 
+
 # --- CONFIG ---
-SHARDS_DIR = "wiki_shards"         # Where the text files are
+SHARDS_DIR = "ecoli_shards"         # Where the text files are(wiki_shards,ecoli_shards: depending on dataset)
 OUTPUT_DIR = "knowledge_base"      # Where to save the vectors
 BATCH_SIZE = 64                    
 MAX_TOKENS = 256                   
