@@ -123,6 +123,33 @@ Connect the local LLM (via Ollama) to the reservoir.
 ```bash
 python UFCE_agent.py
 ```
+
+# 🧬 UFCE Genome: Searching the Code of Life
+
+We have expanded the UFCE framework to handle biological data. Just as the Wikipedia agent searches human knowledge, the Genome agent searches genetic code—mapping raw DNA sequences into semantic vector space.
+
+This module allows researchers to search massive genomic datasets (like the E. coli genome or Human Chromosomes) for functional motifs, gene clusters, and promoter regions using natural language or sequence queries.
+
+### Key Capabilities
+- **Semantic DNA Search**: Find "CRISPR arrays" or "Lac Operon" not just by exact string matching, but by functional similarity in vector space.
+- **Smart Windowing**: Automatically expands context from 600bp to 1500bp when biological keywords (e.g., "operon", "cluster") are detected.
+- **Regex Highlighting**: Instantly highlights motifs (e.g., GATTACA) regardless of case, with precise base-pair positioning.
+
+### 🚀 Quick Start (Genome Demo)
+Switch to the genome dataset in `velocity_config.json` and run the dedicated pipeline:
+```bash
+# 1. Download & Preprocess E. coli Genome
+python genome/preprocessors/preprocess_fasta_ecoli.py
+
+# 2. Vectorize (JAX Accelerated)
+python ufce_ingestion_pipeline_shard.py
+
+# 3. Merge Shards
+python merge_shards.py
+
+# 4. Run the Search Tool
+python genome/genome_search/ufce_genome_search_demo.py
+```
 ## 📂 Repository Contents
 
 ### 🧠 Core Framework
