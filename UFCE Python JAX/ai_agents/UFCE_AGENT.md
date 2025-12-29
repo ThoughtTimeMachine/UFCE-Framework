@@ -52,7 +52,7 @@ This architecture leverages the physical hierarchy of modern computing to accele
 
 ### Prerequisites
 1.  **Ollama Running:** Ensure `ollama serve` is active in a background terminal.
-2.  **Data Ingested:** You must have run `UFCE_ingestion_pipeline.py` first to create the `.dat` file.
+2.  **Data Ingested:** You must have run `ufce_ingestion_pipeline_shard.py` first to create the `.dat` file.
 
 ### Running the Agent
 ```bash
