@@ -110,7 +110,7 @@ class UFCEAgent:
         / ___ / /_/ / /___/ /|  / / /
        /_/  |_\____/_____/_/ |_/ /_/
           
-      NEURAL WEB (JAX)           DATA WORMHOLE
+      NEURAL WEB (JAX)         DATA WORMHOLE
        o        o              \ . . . . . /
         \      /                \         /
     o---( U F )---o              \       /
