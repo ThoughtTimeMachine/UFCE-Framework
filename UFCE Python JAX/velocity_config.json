@@ -1,7 +1,7 @@
 {
     "active_dataset": "human_genome",
     "datasets": {
-        "genome": {
+        "ecolie_genome": {
             "description": "E. coli Genomic Data",
             "shards_input_dir": "genome/shards/ecoli_shards",
             "vectors_output_dir": "genome/knowledge_base/ecoli_vectors",
