@@ -248,7 +248,7 @@ Project VELOCITY eliminates the "Stop-and-Go" latency of standard data loading. 
 This project is open-source under the GNU General Public License v3.0 (GPLv3). This ensures that the core framework remains free for researchers, students, and open-source projects.
 
 ### Commercial Licensing
-For proprietary software, closed-source applications, or enterprise use cases where GPLv3 compliance is not feasible (e.g., defense, proprietary robotics, closed banking systems), a Commercial License is available. This license waives the copyleft requirements and includes priority support.
+For proprietary software, closed-source applications, or enterprise use cases where GPLv3 compliance is not feasible (e.g., defense, proprietary robotics, closed banking systems), a Commercial License is available. This license waives the copyleft requirements.
 
 **Contact:** thoughttimemachinexr@gmail.com for enterprise inquiries.
 ## 📚 Citation
