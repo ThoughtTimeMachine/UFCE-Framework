@@ -1,4 +1,3 @@
-
 # Copyright (C) 2025 Kyle Killian
 #
 # This program is free software: you can redistribute it and/or modify
