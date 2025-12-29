@@ -26,10 +26,10 @@ If you just want to run the pre-configured *E. coli* demo:
 2.  **Run the Pipeline (One-Time Setup):**
     ```bash
     # 1. Download & Clean Data
-    python genome/preprocessors/preprocess_fasta_ecoli.py
+    python genome/preprocessors/ufce_preprocess_genome.py
 
     # 2. Vectorize the Data (JAX/GPU)
-    python ufce_ingestion_pipeline_shard.py
+    python ufce_ingestion_pipeline.py
 
     # 3. Merge into Single Database
     python merge_shards.py

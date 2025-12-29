@@ -30,9 +30,9 @@ WikiExtractor.py enwiki-latest-pages-articles.xml.bz2 --output wiki_shards/ -b 1
 
 This produces multiple text files in wiki_shards/ (one per large article batch), ready for the ingestion pipeline.
 
-### 2. Run Sharded Ingestion (`ufce_ingestion_pipeline_shard.py`)
+### 2. Run Sharded Ingestion (`ufce_ingestion_pipeline.py`)
 ```bash
-python ufce_ingestion_pipeline_shard.py
+python ufce_ingestion_pipeline.py
 
 Key Features:Resumable: Skips already-processed shards.
 Semantic Chunking: Uses Hugging Face tokenizer (256 tokens max) for high-quality chunks.

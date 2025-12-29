@@ -35,10 +35,9 @@ Interpreting Output FWD: Time taken to load weights from RAM and calculate the f
  BWD: Time taken to calculate gradients and update weights.
  Saved: Indicates a checkpoint event where weights were written to the SSD.
 
- TroubleshootingKilled or Out of Memory (OOM): If your System RAM is full (Linux OOM Killer), you have two options:Upgrade RAM: 128GB is the sweet spot for the Hybrid approach.
+TroubleshootingKilled or Out of Memory (OOM): If your System RAM is full (Linux OOM Killer), you have two options:Upgrade RAM: 128GB is the sweet spot for the Hybrid approach.
 Use the Stable Trainer: Switch to the "Disk-Offload" version of the script which keeps Optimizer States on the SSD instead of RAM.
 
 OSError: ... not found: Ensure you ran the huggingface-cli download command correctly and that the llama3_weights folder is in the same directory as the script.
 
-You can copy-paste this entire block directly into your README or docs. It's clean, structured, and covers everything. 🚀
 
