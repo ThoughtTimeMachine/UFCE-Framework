@@ -47,10 +47,10 @@ def get_genome_paths():
         
     # We specifically target the 'genome' block because this is the genome demo.
     # This ensures it works even if 'active_dataset' is set to 'wiki'.
-    if "genome" not in data.get("datasets", {}):
+    if "human_genome" not in data.get("datasets", {}):
         raise ValueError("❌ 'genome' dataset block is missing in velocity_config.json")
         
-    cfg = data["datasets"]["genome"]
+    cfg = data["datasets"]["human_genome"]
     
     # Construct absolute paths
     # vectors_output_dir is relative to project_root (e.g. "knowledge_base_genome")
