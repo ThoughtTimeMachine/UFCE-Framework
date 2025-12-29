@@ -257,7 +257,7 @@ If you use the UFCE Streaming Kernels or the Infinite Context Agent in your rese
 
 ```bibtex
 @software{ufce_framework_2025,
-  author = {Thought Time Machine XR},
+  author = {Kyle Killian},
   title = {The UniField Coupling Equation (UFCE) Framework: Zero-Memory Streaming Kernels},
   year = {2025},
   publisher = {Zenodo},
