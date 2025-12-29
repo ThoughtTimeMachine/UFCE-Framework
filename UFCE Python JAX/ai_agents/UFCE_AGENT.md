@@ -1,7 +1,7 @@
-# UFCE Infinite Context Agent (`UFCE_agent.py`)
+# UFCE Infinite Context Agent (`ufce_agent.py`)
 
 ## Overview
-The `UFCE_agent.py` script is the interactive "Driver" of the UFCE framework. It acts as the bridge between the user, the **Tiered Memory Reservoir** (SSD/RAM), and the Local LLM (Ollama).
+The `ufce_agent.py` script is the interactive "Driver" of the UFCE framework. It acts as the bridge between the user, the **Tiered Memory Reservoir** (SSD/RAM), and the Local LLM (Ollama).
 
 Unlike traditional RAG systems that rely on slow, approximate nearest neighbor (ANN) indexes, this agent performs a **Brute-Force JAX Scan** over the entire knowledge base for every query. This ensures 100% retrieval accuracy ("Lossless") without the need for pre-built indexes or massive VRAM.
 
@@ -52,9 +52,9 @@ This architecture leverages the physical hierarchy of modern computing to accele
 
 ### Prerequisites
 1.  **Ollama Running:** Ensure `ollama serve` is active in a background terminal.
-2.  **Data Ingested:** You must have run `ufce_ingestion_pipeline_shard.py` first to create the `.dat` file.
+2.  **Data Ingested:** You must have run `ufce_ingestion_pipeline.py` first to create the `.dat` file.
 
 ### Running the Agent
 ```bash
-python UFCE_agent.py
+python ufce_agent.py
 
