@@ -12,6 +12,9 @@ knowledge_base/
 llama3_70b_weights/
 llama3_weights/
 opt_states/
+shards/
+genome_data
+ecoli_shards
 
 # Specific Data Files
 metadata_full.txt
