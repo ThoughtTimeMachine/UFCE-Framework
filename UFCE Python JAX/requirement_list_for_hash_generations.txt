@@ -22,6 +22,9 @@ transformers==4.46.3    # Added: Required for AutoTokenizer
 tqdm==4.67.1
 requests==2.32.3
 
+# Genomic Analysis
+biopython==1.84
+
 # JAX (We only ask for the version, the tool gets the rest)
 jax[cuda12_pip]==0.4.31
 
