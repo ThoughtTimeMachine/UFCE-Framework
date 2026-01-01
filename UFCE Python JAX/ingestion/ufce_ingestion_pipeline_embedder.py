@@ -17,15 +17,13 @@ import os
 import glob
 import numpy as np
 import json
-from sentence_transformers import SentenceTransformer
-from transformers import AutoTokenizer
+from llama_cpp import Llama  # <--- The secure backend
 from tqdm import tqdm
 
 # --- LOAD CONFIGURATION ---
 CONFIG_FILE = "velocity_config.json"
 
 def load_config():
-    # Fallback if config doesn't exist yet
     if not os.path.exists(CONFIG_FILE):
         print(f"❌ Error: {CONFIG_FILE} not found. Please create it first.")
         exit()
@@ -41,44 +39,67 @@ cfg = load_config()
 # --- DYNAMIC CONFIG ---
 SHARDS_DIR = cfg["shards_input_dir"]
 OUTPUT_DIR = cfg["vectors_output_dir"]
-BATCH_SIZE = cfg["batch_size"]
-MAX_TOKENS = cfg["max_tokens"]
+# Note: GGUF processes sequentially, so 'batch_size' is less relevant here 
+# but we keep the config variable for reference.
+MAX_TOKENS = cfg["max_tokens"] 
 EMBEDDING_DIM = cfg["embedding_dim"]
 
-# --- SETUP MODEL ---
-print("Loading Model & Tokenizer...")
-model = SentenceTransformer('all-MiniLM-L6-v2')
-model.max_seq_length = MAX_TOKENS
-tokenizer = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+# --- SETUP MODEL (GGUF) ---
+# Ensure this path points to your actual downloaded GGUF file
+MODEL_PATH = "./binaries/nomic-embed-text-v1.5.Q5_K_M.gguf"
+
+if not os.path.exists(MODEL_PATH):
+    print(f"❌ Error: Model not found at {MODEL_PATH}")
+    print("Please download 'nomic-embed-text-v1.5.Q5_K_M.gguf' to the binaries folder.")
+    exit()
+
+print("🚀 Loading GGUF Model & Tokenizer...")
+# n_ctx=8192 is critical for Nomic v1.5
+model = Llama(
+    model_path=MODEL_PATH, 
+    embedding=True, 
+    n_ctx=8192, 
+    verbose=False,
+    n_gpu_layers=-1 # Use all GPU layers
+)
 
 def stream_chunks(filename, max_tokens=256):
-    """Reads a single shard and yields chunks via proper tokenization."""
+    """
+    Reads a single shard and yields chunks via GGUF tokenization.
+    """
     buffer_ids = []
+    
+    # Nomic needs 'search_document: ' prefix, which takes up tokens.
+    # We reserve space for it.
+    prefix_tokens = model.tokenize(b"search_document: ", add_bos=False)
+    prefix_len = len(prefix_tokens)
+    effective_limit = max_tokens - prefix_len
+
     with open(filename, "r", encoding="utf-8", errors="ignore") as f:
         for line in f:
-            # Encode without special tokens first
-            line_ids = tokenizer.encode(line, add_special_tokens=False)
+            # Llama.cpp tokenize expects bytes
+            line_ids = model.tokenize(line.encode("utf-8"), add_bos=False)
             buffer_ids.extend(line_ids)
             
-            # Yield full chunks of exactly MAX_TOKENS size
-            while len(buffer_ids) >= max_tokens:
-                chunk = tokenizer.decode(buffer_ids[:max_tokens])
-                yield chunk
-                buffer_ids = buffer_ids[max_tokens:]
+            # Yield full chunks
+            while len(buffer_ids) >= effective_limit:
+                chunk_ids = buffer_ids[:effective_limit]
+                # Decode back to string
+                chunk_text = model.detokenize(chunk_ids).decode("utf-8", errors="ignore")
+                yield chunk_text
+                buffer_ids = buffer_ids[effective_limit:]
         
-        # Yield the remainder
+        # Yield remainder
         if buffer_ids:
-            yield tokenizer.decode(buffer_ids)
+            chunk_text = model.detokenize(buffer_ids).decode("utf-8", errors="ignore")
+            yield chunk_text
 
 def process_single_shard(shard_path):
     """
     Processes one text file -> .vec.npy (Vectors) + .meta (Text)
-    Returns: True if processed, False if skipped
     """
-    # FIX: Strip extension so we don't get .txt.vec.npy
     base_name = os.path.splitext(os.path.basename(shard_path))[0]
     
-    # Define Output Filenames (Must match merge_shards expectations)
     output_vec = os.path.join(OUTPUT_DIR, f"{base_name}.vec.npy")
     output_meta = os.path.join(OUTPUT_DIR, f"{base_name}.meta")
 
@@ -89,76 +110,77 @@ def process_single_shard(shard_path):
 
     print(f"\n⚡ Processing: {base_name}...")
 
-    # --- PASS 1: Count & Create Metadata ---
-    # We write metadata first to count how many chunks we have
-    temp_meta = output_meta + ".tmp"
+    # --- PASS 1: Tokenize & Chunk ---
     chunks_text = []
-    
     chunk_stream = stream_chunks(shard_path, MAX_TOKENS)
     
-    with open(temp_meta, "w", encoding="utf-8") as f:
-        for chunk in tqdm(chunk_stream, desc="Pass 1 (Tokenizing)", unit=" chunks"):
-            clean_chunk = chunk.replace("\n", " ")
-            f.write(clean_chunk + "\n")
-            chunks_text.append(clean_chunk)
+    # We collect all chunks first to ensure clean writing
+    for chunk in chunk_stream:
+        # Collapse newlines for cleaner metadata
+        clean = chunk.replace("\n", " ")
+        if clean.strip(): # Skip empty chunks
+            chunks_text.append(clean)
 
     num_chunks = len(chunks_text)
-    
     if num_chunks == 0:
         print(f"⚠️  Warning: {base_name} resulted in 0 chunks.")
-        if os.path.exists(temp_meta): os.remove(temp_meta)
         return False
 
-    # --- PASS 2: Embedding ---
-    # We use model.encode directly on the list of strings for efficiency
+    # --- PASS 2: Embedding Loop ---
     print(f"   Embedding {num_chunks} chunks...")
-    
-    embeddings = model.encode(
-        chunks_text, 
-        batch_size=BATCH_SIZE, 
-        show_progress_bar=True, 
-        convert_to_numpy=True,
-        normalize_embeddings=True # Good for cosine similarity
-    )
+    embeddings_list = []
+
+    # GGUF models are not optimized for large batching like PyTorch.
+    # We loop through them. It is still very fast on GPU.
+    for text in tqdm(chunks_text, desc="Embedding", unit="chunk"):
+        # IMPORTANT: Add the Nomic prefix!
+        # This tells the model "This is a document to be stored"
+        prefixed_text = "search_document: " + text
+        
+        # Generate embedding
+        # Returns a list of floats
+        vector = model.create_embedding(prefixed_text)['data'][0]['embedding']
+        embeddings_list.append(vector)
+
+    # Convert to Numpy
+    embeddings = np.array(embeddings_list, dtype='float32')
+
+    # Normalize (L2) - Critical for Cosine Similarity
+    # (Nomic GGUF usually returns normalized, but we double-check)
+    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+    embeddings = embeddings / norms
 
     # --- SAVE ---
-    # Save as standard .npy so merge_shards can read it easily
-    np.save(output_vec, embeddings.astype('float32'))
+    np.save(output_vec, embeddings)
     
-    # Rename temp metadata to final
-    if os.path.exists(output_meta): os.remove(output_meta)
-    os.rename(temp_meta, output_meta)
+    with open(output_meta, "w", encoding="utf-8") as f:
+        for chunk in chunks_text:
+            f.write(chunk + "\n")
     
     return True
 
-from multiprocessing import Pool, cpu_count
-
-def run_ingestion_pipeline(parallel=True):
-    """Main entry point — supports both parallel and single-threaded modes."""
+def run_ingestion_pipeline():
+    """Main entry point."""
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
 
     shard_files = sorted(glob.glob(os.path.join(SHARDS_DIR, "*.txt")))
     
     if not shard_files:
-        print(f"❌ No shards found in '{SHARDS_DIR}'. Check your config or folder.")
+        print(f"❌ No shards found in '{SHARDS_DIR}'. Check your config.")
         return
 
     print(f"Found {len(shard_files)} shards.")
+    print("🚀 Running single-threaded (GGUF Safe Mode)...")
 
-    if parallel and len(shard_files) > 1:
-        print(f"🚀 Running in parallel on {cpu_count()} cores...")
-        with Pool(cpu_count()) as pool:
-            # Use imap for ordered progress bar
-            list(tqdm(pool.imap(process_single_shard, shard_files), 
-                      total=len(shard_files), desc="Overall Progress", unit="shard"))
-    else:
-        print("Running single-threaded...")
-        for shard in tqdm(shard_files, desc="Processing Shards", unit="shard"):
-            process_single_shard(shard)
+    # NOTE: We removed Multiprocessing.
+    # Passing GGUF C++ pointers across processes is unstable.
+    # Sequential processing on GPU is usually plenty fast.
+    for shard in tqdm(shard_files, desc="Processing Shards", unit="shard"):
+        process_single_shard(shard)
 
     print("-" * 50)
     print("✅ Ingestion complete!")
 
 if __name__ == "__main__":
-    run_ingestion_pipeline(parallel=True)  # Default to parallel
+    run_ingestion_pipeline()
