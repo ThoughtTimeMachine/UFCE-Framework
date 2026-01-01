@@ -33,7 +33,7 @@ project_root = os.path.abspath(os.path.join(script_dir, '..', '..'))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from ai_agents.ufce_agent import UFCEAgent
+from agents.ufce_agent import UFCEAgent
 
 # --- CONFIGURATION LOADER ---
 CONFIG_FILE = os.path.join(project_root, "velocity_config.json")
@@ -46,7 +46,7 @@ def get_genome_paths():
         data = json.load(f)
         
     # We target 'genome' generically so it works for both E. coli and Human config blocks
-    # Note: Ensure your velocity_config.json has a "genome" block, or change this key to match yours
+    # Note: Ensure your velocity_config.json has a "human_genome" block, or change this key to match yours
     target_key = "human_genome" 
     if target_key not in data.get("datasets", {}):
         # Fallback: check if active_dataset is a genome type
