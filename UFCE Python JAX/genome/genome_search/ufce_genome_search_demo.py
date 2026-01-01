@@ -32,7 +32,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # --- IMPORT AGENT ---
-from ai_agents.ufce_agent import UFCEAgent
+from agents.ufce_agent import UFCEAgent
 
 # --- CONFIGURATION LOADER ---
 CONFIG_FILE = os.path.join(project_root, "velocity_config.json")
