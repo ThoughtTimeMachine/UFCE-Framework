@@ -15,6 +15,7 @@ opt_states/
 shards/
 genome_data/
 ecoli_shards/
+binaries/
 
 # Specific Data Files
 metadata_full.txt
