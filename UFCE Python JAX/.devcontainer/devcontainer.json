@@ -15,7 +15,12 @@
             "cudaVersion": "12.4"
         }
     },
-
+    
+    // 3. MOUNT MODEL WEIGHTS FROM HOST (D: drive)
+    "mounts": [
+      "source=D:/llama3_weights,target=${containerWorkspaceFolder}/llama3_weights,type=bind,readonly=false",
+        "source=D:/llama3_70b_weights,target=${containerWorkspaceFolder}/llama3_70b_weights,type=bind,readonly=false"
+    ],
     "postCreateCommand": "python -m venv .venv && ./.venv/bin/pip install -r requirements.txt --require-hashes",
 
     "customizations": {
@@ -32,4 +37,5 @@
     },
 
     "remoteUser": "vscode"
+    
 }
