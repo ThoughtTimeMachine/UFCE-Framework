@@ -8,20 +8,33 @@
         "--shm-size=8g"
     ],
 
-    // 2. THIS INSTALLS THE NVIDIA DRIVER TOOLS INSIDE THE CONTAINER:
+    // 2. FEATURES: INSTALL NVIDIA, NODE.JS (v20), AND RUST
     "features": {
         "ghcr.io/devcontainers/features/nvidia-cuda:1": {
             "installCudnn": true,
             "cudaVersion": "12.4"
+        },
+        // Adds Node.js v20 automatically
+        "ghcr.io/devcontainers/features/node:1": {
+            "version": "20"
+        },
+        // Adds Rust automatically
+        "ghcr.io/devcontainers/features/rust:1": {
+            "version": "latest",
+            "profile": "default"
         }
     },
     
     // 3. MOUNT MODEL WEIGHTS FROM HOST (D: drive)
     "mounts": [
       "source=D:/llama3_weights,target=${containerWorkspaceFolder}/llama3_weights,type=bind,readonly=false",
-        "source=D:/llama3_70b_weights,target=${containerWorkspaceFolder}/llama3_70b_weights,type=bind,readonly=false"
+      "source=D:/llama3_70b_weights,target=${containerWorkspaceFolder}/llama3_70b_weights,type=bind,readonly=false"
     ],
-    "postCreateCommand": "python -m venv .venv && ./.venv/bin/pip install -r requirements.txt --require-hashes",
+
+    // 4. INSTALL LINUX DEPS + SETUP PYTHON
+    // We chain the 'apt-get' install before your pip install.
+    // This installs the libraries Tauri needs (WebKit, GTK, etc.)
+    "postCreateCommand": "sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.0-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev && python -m venv .venv && ./.venv/bin/pip install -r requirements.txt --require-hashes",
 
     "customizations": {
         "vscode": {
@@ -31,11 +44,12 @@
             },
             "extensions": [
                 "ms-python.python",
-                "ms-python.vscode-pylance"
+                "ms-python.vscode-pylance",
+                "rust-lang.rust-analyzer", 
+                "tauri-apps.tauri-vscode"
             ]
         }
     },
 
     "remoteUser": "vscode"
-    
 }
