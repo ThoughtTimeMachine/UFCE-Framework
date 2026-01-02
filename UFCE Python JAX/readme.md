@@ -1,4 +1,21 @@
-before running project for the first time, to generate the requirements.txt library list of hashes, run:
+Project Setup & Commands
+
+## 1. Prerequisites (Run on Main Host Computer)
+Before you can run the full desktop application, you must install these tools on your actual computer (Windows/Mac/Linux), **not** inside the Docker container.
+
+1.  **Node.js:** [Download LTS Version](https://nodejs.org/)
+    * *Check:* Open a new terminal and type `node -v`
+2.  **Rust:** [Download Rustup](https://rustup.rs/)
+    * *Check:* Open a new terminal and type `rustc --version`
+
+---
+
+## 2. Python Dependencies (Run in Dev Container)
+Before running the project for the first time, you need to generate the `requirements.txt` with strict hash locking. 
+
+**Run these commands inside the VS Code Terminal (Dev Container):**
+
+before running project for the first time, and any time you add new dependencies to the projects "requirement_list_for_hash_generations.txt" to generate the requirements.txt library list of hashes, run:
 
 ```bash
 # 1. Setup
