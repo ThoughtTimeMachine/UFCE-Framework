@@ -35,3 +35,8 @@ jax[cuda12_pip]==0.4.31
 # Velocity Trainer Architecture (Phase 2)
 flax==0.8.5      # Neural Network Library
 optax==0.2.3     # Gradient Processing & Optimization
+
+# --- DESKTOP APP INTEGRATION (Phase 3) ---
+fastapi>=0.110.0   # The API Framework
+uvicorn>=0.29.0    # The Server to run the API
+pyinstaller>=6.5.0 # Compiles Python to .exe
