@@ -97,3 +97,7 @@ Creates the final standalone installer (e.g., `.exe` for Windows).
 * **"Linker link.exe not found":** You missed **Step B** (C++ Build Tools). Install them and restart your computer.
 * **"Tauri is not recognized":** You missed **Step C** (`npm install`). Run it inside the `recall` folder.
 * **Clean Build:** If the app behaves strangely, delete the `src-tauri/target` folder and run `npm run tauri dev` again.
+
+* **"Sidecar not found" or "Permission Denied":** 1. Check that the sidecar is named exactly `velocity-engine-x86_64-pc-windows-msvc.exe` inside `src-tauri/binaries/`.
+    2. Ensure `src-tauri/src/lib.rs` includes `.plugin(tauri_plugin_shell::init())`.
+    3. Verify that your `src-tauri/capabilities/default.json` (or your main config) explicitly allows the sidecar.

@@ -36,5 +36,16 @@
     "externalBin": [
       "binaries/velocity-engine"
     ]
+  },
+  "plugins": {
+    "shell": {
+      "sidecar": true,
+      "scope": [
+        {
+          "name": "binaries/velocity-engine",
+          "sidecar": true
+        }
+      ]
+    }
   }
 }
