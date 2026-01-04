@@ -12,12 +12,17 @@ knowledge_base/
 llama3_70b_weights/
 llama3_weights/
 opt_states/
+shards/
+genome_data/
+ecoli_shards/
+binaries/
 
 # Specific Data Files
 metadata_full.txt
 metadata.txt
 large_dataset.txt
 knowledge_base_full.dat
+requirements.txt
 
 # Compressed Files
 *.bz2
@@ -244,3 +249,5 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+UFCE Python JAX/ecoli_shards/ecoli_genome.txt
+UFCE Python JAX/genome_data/ecoli_mg1655.fna.gz

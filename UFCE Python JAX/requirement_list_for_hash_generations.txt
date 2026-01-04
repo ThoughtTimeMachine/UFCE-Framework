@@ -1,10 +1,15 @@
 # UFCE Algorithm Input Requirements
 # No hashes here - we let pip-compile generate them!
 
+# Core Math & Utils
 numpy==2.0.2
 numba==0.60.0
 llvmlite==0.43.0
 psutil==6.1.0
+tqdm==4.67.1
+requests==2.32.3
+
+# Visualization (Keep if you use plotting, otherwise safe to remove for production)
 matplotlib==3.9.2
 contourpy==1.3.3
 cycler==0.12.1
@@ -16,5 +21,22 @@ pyparsing==3.2.0
 python-dateutil==2.9.0.post0
 six==1.17.0
 
-# JAX (We only ask for the version, the tool gets the rest)
+# --- INFERENCE & RETRIEVAL (The New Stack) ---
+# Replaces 'sentence-transformers' and 'transformers'
+# Note: On Windows, this may require Visual Studio C++ Build Tools to compile
+llama-cpp-python>=0.3.0
+
+# Genomic Analysis
+biopython==1.84
+
+# JAX (Velocity Engine Core)
 jax[cuda12_pip]==0.4.31
+
+# Velocity Trainer Architecture (Phase 2)
+flax==0.8.5      # Neural Network Library
+optax==0.2.3     # Gradient Processing & Optimization
+
+# --- DESKTOP APP INTEGRATION (Phase 3) ---
+fastapi>=0.110.0   # The API Framework
+uvicorn>=0.29.0    # The Server to run the API
+pyinstaller>=6.5.0 # Compiles Python to .exe
