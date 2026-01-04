@@ -119,9 +119,33 @@ target/
 # Jupyter Notebook
 .ipynb_checkpoints
 
+# Node / Javascript
+node_modules
+dist
+.DS_Store
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/schemas/
+src-tauri/gen/
+
+# Python / Sidecar
+__pycache__/
+*.py[cod]
+.venv
+venv
+*.spec
+build/
+# We DO want to commit the Python source code, but NOT the 'dist' folder where PyInstaller puts the temp build
+python_sidecar/dist/
+python_sidecar/build/
+
 # IPython
 profile_default/
 ipython_config.py
+
+# But we DO want to keep the final binary we moved
+!src-tauri/binaries/velocity-engine-x86_64-pc-windows-msvc.exe
 
 # pyenv
 #   For a library or package, you might want to ignore these files since the code is
