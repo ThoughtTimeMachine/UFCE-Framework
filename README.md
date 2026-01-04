@@ -5,7 +5,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-yellow.svg)](https://www.python.org/)
 [![JAX](https://img.shields.io/badge/JAX-Accelerated-green.svg)](https://github.com/google/jax)
-[![PAPER](https://zenodo.org/records/17984328.svg)](https://zenodo.org/records/17984328) <!-- 
+[![Zenodo](https://zenodo.org/badge/DOI/10.5281/zenodo.18055873.svg)](https://zenodo.org/records/18055873)
 
 ## 🚀 The Breakthrough
 
@@ -15,98 +15,253 @@ The **UFCE streaming kernel** eliminates the "Memory Wall" entirely — computin
 
 ### Latest Benchmarks (December 2025 — Ryzen 9 7950X + RTX 4070 Ti)
 
-**Hardware:** AMD Ryzen 9 7950X (CPU) + NVIDIA RTX 4070 Ti (GPU)
+**Hardware:** AMD Ryzen 9 7950X (CPU) + NVIDIA RTX 4070 Ti (GPU) + 80GB DDR5 RAM
 
 | Kernel Implementation | Precision | Throughput | Speedup vs CPU | Use Case |
 | :--- | :--- | :--- | :--- | :--- |
-| Ryzen 9 7950X (CPU) **Numba CPU** | FP64 | 43.33 Billion ops/s | 1.0× | Baseline Validation |
-| RTX 4070 Ti (Scientific) **CUDA C++** | FP32 | 1.50 Trillion ops/s | 34.7× | Legacy Native Kernel |
+| **Ryzen 9 7950X (CPU)** | FP64 | 43.33 Billion ops/s | 1.0× | Baseline Validation |
+| **RTX 4070 Ti (Scientific)** | FP32 | 1.50 Trillion ops/s | 34.7× | Legacy Native Kernel |
 | **JAX "God Mode"** | **FP32** | **2.02 Trillion ops/s** | **47.0×** | **Theoretical Max / Scanning** |
-| **JAX Softmax** | FP32 | **232.6 Billion ops/s** | 5.3× | **LLM Attention (Linear)** |
+| **JAX Streaming Softmax** | FP32 | **232.6 Billion ops/s** | 5.3× | **LLM Attention (Linear)** |
 | **JAX Top-K** | FP32 | 1.40 Billion ops/s | 0.03× | **Deep Security Forensics** |
 
 ### Key Achievements
 * **The 2 Trillion Barrier Broken:** The JAX Blocked Kernel achieved **2,020 Billion operations per second** on a single consumer GPU.
 * **Real-World LLM Attention:** Validated a **Streaming Softmax** kernel running at **232 Billion ops/s**, proving that exact attention statistics can be computed for 100M+ token contexts in real-time.
 * **Infinite Context:** Processed a **50 Trillion Interaction** workload (equivalent to a 1 Billion Token Context) in just **24.7 seconds** on RTX 4070 Ti.
-**1 Terabyte Challenge**: 125 billion points processed in **2.89 seconds** (CPU) with **0.00 MB memory overhead**.
+* **1 Terabyte Challenge**: 125 billion points processed in **2.89 seconds** (CPU) with **0.00 MB memory overhead**.
 
+---
+
+## 🤖 The Infinite Context Agent (Tutorial)
+
+This repository includes a fully functional **"Drill-Down" AI Agent** capable of searching massive datasets (e.g., all of Wikipedia) on a consumer PC without using enterprise VRAM.
+
+### Step 1: Preparing Wikipedia Input Shards
+The pipeline works best with the full English Wikipedia dump.
+
+1. **Download the Dump**:
+   ```bash
+   wget https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-pages-articles.xml.bz2
+
+### Step 2: Prepare the Data
+
+1. **Extract Clean Text Shards (using WikiExtractor)**:
+```bash
+pip install wikiextractor
+```
+2. **Run extraction to create the wiki_shards/ folder**:
+```bash
+WikiExtractor.py enwiki-latest-pages-articles.xml.bz2 --output wiki_shards/ -b 1M
+```
+This produces multiple text files in wiki_shards/ (one per large article batch), ready for the ingestion pipeline.
+
+### Step 3: Ingest into Reservoir
+
+## Overview
+The UFCE ingestion pipeline has been upgraded to a **sharded, resumable architecture** for handling truly massive datasets (e.g., full Wikipedia dumps, Common Crawl subsets, or multi-domain corpora). It consists of two scripts:
+
+- `ufce_ingestion_pipeline_shard.py`: Processes individual text shards into vector + metadata pairs.
+- `merge_shards.py`: Concatenates all shards into the final `knowledge_base_full.dat` and `metadata_full.txt` used by the UFCE agent.
+
+This design enables **safe, parallel, and resumable** ingestion of datasets far larger than system RAM while maintaining the **Zero-Memory** philosophy.
+
+Convert the text into a Tiered Memory Reservoir (SSD-backed Vector DB). 
+The sharded pipeline processes Wikipedia articles in independent chunks, using streaming embedding per shard to avoid RAM overload on massive datasets.
+
+```bash
+python UFCE_ingestion_pipeline.py
+# Output: knowledge_base.dat (Binary Vectors) + metadata.txt (Index)
+```
+### Step 4: Launch the Agent with Local LLM (Ollama)
+
+The UFCE agent connects to a running Ollama server to generate responses grounded in your knowledge base.
+
+You have **two options** for running Ollama — choose based on convenience and performance.
+
+#### Option 1: Ollama on Host Machine (Windows — Recommended for Speed & Ease)
+This is the fastest and simplest setup — Ollama runs natively on your Windows machine.
+Host version is faster (no container overhead, direct GPU access if using Ollama GPU build).
+
+1. **Install Ollama** (if not already):
+   - Download from https://ollama.com/download
+   - Run the installer.
+
+2. **Download Llama-3**:
+   ```bash
+   ollama pull llama3      # 8B model (fast, ~4.7GB)
+   # or
+   ollama pull llama3:70b  # 70B model (if you have 48GB+ RAM/VRAM)
+3. **Start the Model (in a separate CMD/PowerShell window)**:
+```bash
+ollama run llama3
+ ```
+Keep this window open — it runs the server on localhost:11434
+
+### Option 2: Ollama Inside Docker Container
+Use this if you want everything isolated in the container 
+
+1. **Add to your Dockerfile** (or run manually):
+```dockerfile
+# Install Ollama
+RUN curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull model (do this at build time or first run)
+RUN ollama pull llama3
+```
+2. **Start Ollama Server** in container background:
+```bash
+ollama serve &
+```
+3. **Update Agent URL**(in UFCE_agent.py):
+OLLAMA_URL = "http://localhost:11434/api/generate"
+
+### Step 5: Launch the Agent
+
+Connect the local LLM (via Ollama) to the reservoir.
+
+```bash
+python UFCE_agent.py
+```
+
+# 🧬 UFCE Genome: Searching the Code of Life
+
+We have expanded the UFCE framework to handle biological data. Just as the Wikipedia agent searches human knowledge, the Genome agent searches genetic code—mapping raw DNA sequences into semantic vector space.
+
+This module allows researchers to search massive genomic datasets (like the E. coli genome or Human Chromosomes) for functional motifs, gene clusters, and promoter regions using natural language or sequence queries.
+
+### Key Capabilities
+- **Semantic DNA Search**: Find "CRISPR arrays" or "Lac Operon" not just by exact string matching, but by functional similarity in vector space.
+- **Smart Windowing**: Automatically expands context from 600bp to 1500bp when biological keywords (e.g., "operon", "cluster") are detected.
+- **Regex Highlighting**: Instantly highlights motifs (e.g., GATTACA) regardless of case, with precise base-pair positioning.
+
+### 🚀 Quick Start (Genome Demo)
+Switch to the genome dataset in `velocity_config.json` and run the dedicated pipeline:
+```bash
+# 1. Download & Preprocess E. coli Genome
+python genome/preprocessors/preprocess_fasta_ecoli.py
+
+# 2. Vectorize (JAX Accelerated)
+python ufce_ingestion_pipeline_shard.py
+
+# 3. Merge Shards
+python merge_shards.py
+
+# 4. Run the Search Tool
+python genome/genome_search/ufce_genome_search_demo.py
+```
 ## 📂 Repository Contents
 
-### 🐍 Next-Gen JAX Kernels (Recommended)
-* `ufce_jax_50T_block_kernel_god_mode.py` — **The Record Breaker.** Runs the "God Mode" block-streaming kernel to hit 2.02T ops/s.
-* `ufce_jax_real_world_measurements.py` — **The Real World.** Runs the Streaming Softmax (LLM) and Top-K (Security) kernels.
-* `ufce_jax_oscillating_hybrid_load_balancing.py` — **Hybrid Physics.** Demonstrates CPU/GPU oscillating load balancing for physical simulations.
+### 🧠 Core Framework
+- `ufce_jax_god_mode_benchmark.py` — The Record Breaker. Runs the "God Mode" block-streaming kernel (2.02T ops/s).
+- `ufce_jax_real_world_measurements.py` — The Real World. Runs the Streaming Softmax (LLM) and Top-K (Security) kernels.
+- `ufce_attention_core.py` — **Legacy** — Early prototype for attention logic (now integrated into agent and trainers).
 
+### 🛠️ Ingestion Pipeline (Sharded & Resumable)
+- `ufce_ingestion_pipeline_shard.py` — Processes individual Wikipedia shards into vector + metadata pairs (resumable, semantic chunking).
+- `merge_shards.py` — Concatenates all shards into the final `knowledge_base_full.dat` + `metadata_full.txt`.
+- `prepare_wiki_dump.py` — **Deprecated** — Legacy single-file processor (use WikiExtractor instead).
+
+### 🚀 Training & Acceleration (VELOCITY)
+- `velocity_70b_trainer_save_layers.py` — Full trainer with weight persistence (70B-capable).
+- `velocity_8b_trainer_save_layers.py` — 8B version with saving.
+- `velocity_8b_hybrid_trainer_save_layers.py` — Hybrid with RAM cache and periodic checkpoints.
+- `velocity_8b_hybrid_trainer_save_layers_less_128GB_ram.py` — Disk-offload optimizer state for lower RAM systems.
+
+### 🤖 Agent & Demo
+- `UFCE_agent.py` — The interactive RAG agent with infinite-context retrieval over the knowledge base.
+
+### 📜 Legacy & Docs
 - `paper/` — Full academic preprint (LaTeX + PDF).
-- `needle_In_a_haystack_cyber_security_validation.py` — Cybersecurity: Finds attack in 100B logs in ~1.0s.
-- `validate_blockchain.py` — FinTech: Detects whale in 100B transactions in ~1.3s.
-- `validate_attention_god_mode.py` — Neural Networks: Linear attention on 10M token context in ~11s.
-- `validate_attention.cu` — CUDA kernel for GPU attention flux (God Mode capable).
+- `validate_attention.cu` — Optimized CUDA C++ kernels.
 
-## 🛠️ Quick Start (One-Click with VS Code Dev Container)
+### 📊 Benchmarks & Legacy Demos
+- `test_search.py` — Simple interactive vector search demo on a test subset (loads memmap vectors + metadata, performs cosine similarity search with SentenceTransformer).
+- `ufce_layer_swapper.py` — **Legacy Demo** — Early proof-of-concept showing a 32GB model forward pass on 12GB VRAM (~25s total). Superseded by full trainers.
 
-This repo is configured as a **VS Code Dev Container** — the easiest way to reproduce.
+## 🛠️ Quick Start (VS Code Dev Container)
 
-1. Install [VS Code](https://code.visualstudio.com/) and the "Dev Containers" extension.
+This repo is configured as a VS Code Dev Container — the easiest way to reproduce.
+
+1. Install VS Code and the "Dev Containers" extension.
 2. Clone the repo and open the folder in VS Code.
-3. When prompted, click **"Reopen in Container"**.
-   - The environment (Python 3.12, Numba, CUDA) auto-installs.
+3. When prompted, click "Reopen in Container".
 
 ### Run the Benchmarks
 
-**CPU Tests** (inside container terminal):
+**CPU Tests** (inside container terminal from UFCE Algorithms python C++ folder):
+
 ```bash
 python cyber_validation.py
 python blockchain_validation.py
-python attention_validation.py
+```
+**Run the Record-Breaking "God Mode" Benchmark:**
 
-**1. Run the Record-Breaking "God Mode" Benchmark:**
 ```bash
 python ufce_jax_god_mode_benchmark.py
-
-**GPU Test (CUDA — requires NVIDIA drivers + CUDA toolkit installed on host)**:
-
-The kernel is optimized for modern NVIDIA GPUs. Use the correct compute capability for your card:
+```
+**GPU Test (CUDA C++ Native):** (UFCE Algorithm CUDA folder)
 
 ```bash
-# RTX 40-series (Ada Lovelace) — e.g., RTX 4070 Ti, 4080, 4090
-nvcc -o attention_gpu validate_attention.cu -O3 -arch=sm_89
-
-# RTX 30-series (Ampere) — e.g., RTX 3080, 3090
-nvcc -o attention_gpu validate_attention.cu -O3 -arch=sm_86
-
-# RTX 20-series (Turing) — e.g., RTX 2080
-nvcc -o attention_gpu validate_attention.cu -O3 -arch=sm_75
-
-# GTX 10-series (Pascal) — e.g., GTX 1080
-nvcc -o attention_gpu validate_attention.cu -O3 -arch=sm_61
-
-# For maximum compatibility (slower on newer cards)
-nvcc -o attention_gpu validate_attention.cu -O3 -gencode arch=compute_61,code=sm_61 -gencode arch=compute_89,code=sm_89
-
-# Or GPU version:
+# For RTX 40-series (Ada Lovelace)
 nvcc -o attention_gpu validate_attention.cu -O3 -arch=sm_89
 ./attention_gpu
+```
+## 🧠 The "Cognitive Tax": Blind vs. Smart Processing
 
-### Removing GPU Kernel Timeout Cap (Windows only)
-Long-running CUDA kernels can be killed by Windows' default 2-second TDR limit. To disable it (use with caution — can make GPU hangs require reboot):
-
-1. Open Registry Editor (`regedit` as Administrator).
-2. Navigate to: `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\GraphicsDrivers`
-3. Create or edit these DWORD (32-bit) values:
-   - `TdrDelay` = `60` (decimal) → increases timeout to 60 seconds
-   - `TdrLevel` = `0` (decimal) → disables TDR completely (riskier, but needed for very long kernels)
-4. Reboot.
-
-> Warning: Disabling TDR can cause system instability if a kernel truly hangs. Test responsibly.
-
-### 🧠 The "Cognitive Tax": Blind vs. Smart Processing
 We benchmarked the cost of introducing physics-informed decision logic into the kernel.
 
-| Kernel Type | Logic | Throughput | Insight |
-| :--- | :--- | :--- | :--- |
-| **Blind "God Mode"** | No decision (Always GPU) | **2.02 Trillion Ops/s** | Pure Tensor Core saturation. |
-| **Cognitive Hybrid** | Physics-Check per block | **0.35 Trillion Ops/s** | **The cost of flexibility.** Conditional logic (`if/else`) breaks pure kernel fusion, but enables dynamic energy saving. |
+| Kernel Type         | Logic                       | Throughput             | Insight                                      |
+|---------------------|-----------------------------|------------------------|----------------------------------------------|
+| Blind "God Mode"    | No decision (Always GPU)    | 2.02 Trillion Ops/s    | Pure Tensor Core saturation.                 |
+| Cognitive Hybrid    | Physics-Check per block     | 0.35 Trillion Ops/s    | The cost of flexibility. Conditional logic (if/else) breaks pure kernel fusion, but enables dynamic energy saving. |
 
 **Conclusion:** For maximum raw power, use the Blind Kernel. For energy-efficient robotics (where you want to idle the GPU during low-flux), use the Cognitive Kernel.
+
+## ⚡ Project VELOCITY: Breaking the 12GB VRAM Barrier
+
+While traditional training requires the entire model to fit in VRAM, **Project VELOCITY** implements a **Layer-Wise Swapper**. This treats your System RAM (DDR5) as a high-speed L4 cache and your GPU VRAM as a dedicated compute core.
+
+### The "Infinite Model" Benchmark
+We successfully executed a **32GB Model (Llama-3-8B equivalent)** on a single **12GB RTX 4070 Ti** with near-zero compute starvation.
+
+| Metric | Achievement | Impact |
+| :--- | :--- | :--- |
+| **Model Size** | **32 GB** (FP32/BF16) | 2.7x larger than physical VRAM capacity. |
+| **Layer Latency** | **~0.78–0.94s** (forward) | Sub-second per layer with real weights. |
+| **Effective Throughput** | **37.5M tokens/sec** (empirical) | Up to 512 GB/s theoretical with 4-bit transport. |
+| **Training Capability** | **Full backpropagation** | Real forward + backward passes; persistent fine-tuning possible. |
+
+### 🔬 How it Works: The Quad-Buffered Ring Pipeline
+Project VELOCITY eliminates the "Stop-and-Go" latency of standard data loading. By using **4-zone asynchronous DMA**, the system "teleports" the next layer into the GPU while the current layer is computing.
+
+1. **Ingest:** Fetches the next layer from the L4 Cache (System RAM) or falls back to Storage (SSD).
+2. **Tokenize/Prepare:** Prepares data (optional). Bitcasts or formats the tensor (e.g., Int16 View) for optimal transport.
+3. **Pin/Feed:** Pages the memory into a "Page-Locked" DMA zone to trigger a direct Asynchronous DMA transfer across the PCIe bus.
+4. **Compute:** The GPU executes the forward/backward pass. This is the only moment the layer occupies VRAM
+5. **Writeback:** Updates gradients and clears the VRAM for the next incoming layer.
+
+---
+## ⚖️ Licensing & Commercial Use
+
+### Open Source License
+This project is open-source under the GNU General Public License v3.0 (GPLv3). This ensures that the core framework remains free for researchers, students, and open-source projects.
+
+### Commercial Licensing
+For proprietary software, closed-source applications, or enterprise use cases where GPLv3 compliance is not feasible (e.g., defense, proprietary robotics, closed banking systems), a Commercial License is available. This license waives the copyleft requirements.
+
+**Contact:** thoughttimemachinexr@gmail.com for enterprise inquiries.
+## 📚 Citation
+
+If you use the UFCE Streaming Kernels or the Infinite Context Agent in your research, please cite the framework:
+
+```bibtex
+@software{ufce_framework_2025,
+  author = {Kyle Killian},
+  title = {The UniField Coupling Equation (UFCE) Framework: Zero-Memory Streaming Kernels},
+  year = {2025},
+  publisher = {Zenodo},
+  doi = {10.5281/zenodo.17906337},
+  url = {[https://github.com/thoughttimemachinexr/UFCE](https://github.com/thoughttimemachinexr/UFCE)}
+}
+
