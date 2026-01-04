@@ -1,0 +1,73 @@
+{
+    "active_dataset": "human_genome",
+    "datasets": {
+        "ecolie_genome": {
+            "description": "E. coli Genomic Data",
+            "shards_input_dir": "genome/shards/ecoli_shards",
+            "vectors_output_dir": "genome/knowledge_base/ecoli_vectors",
+            "final_dat_name": "knowledge_base_full.dat",
+            "final_meta_name": "metadata_full.txt",
+            "max_tokens": 256,
+            "embedding_dim": 384,
+            "batch_size": 64,
+            "preprocessing": {
+                "download_url": "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/005/845/GCF_000005845.2_ASM584v2/GCF_000005845.2_ASM584v2_genomic.fna.gz",
+                "raw_data_dir": "genome/genome_data/genome_data_ecoli",
+                "raw_filename": "ecoli_mg1655.fna.gz",
+                "preprocessed_filename": "ecoli_genome.txt"
+            }
+        },
+        "wiki": {
+            "description": "Wikipedia English Dump",
+            "shards_input_dir": "wiki/shards/wiki_shards",
+            "vectors_output_dir": "wiki/knowledge_base/wiki_vectors",
+            "final_dat_name": "knowledge_base_full.dat",
+            "final_meta_name": "metadata_full.txt",
+            "max_tokens": 512,
+            "embedding_dim": 384,
+            "batch_size": 128
+        },
+        "personal_documents": {
+            "description": "Personal Document Archive (Emails, PDFs, Notes, Code, etc..)",
+            "shards_input_dir": "personal/shards/personal_shards",
+            "vectors_output_dir": "personal/knowledge_base/personal_vectors",
+            "final_dat_name": "knowledge_base_full.dat",
+            "final_meta_name": "metadata_full.txt",
+            "max_tokens": 8192,
+            "embedding_dim": 768,
+            "batch_size": 32,
+            "notes": {
+                "embedding_model": "nomic-ai/nomic-embed-text-v1.5 (supports 8192 context, Matryoshka embeddings)",
+                "supported_file_types": [
+                ".txt",
+                ".md",
+                ".pdf (text layer only — scanned PDFs will be skipped)",
+                ".docx",
+                ".html"
+                ],
+                "future_extensions": [
+                "Email parsing (.eml, .msg)",
+                "OCR for scanned images/PDFs",
+                "Code syntax highlighting"
+                ],
+                "recommendations": "Use high-quality text files for best results. Large PDFs may take time to ingest."
+            }
+        },
+       "human_genome": {
+            "description": "GRCh38 Human Genome Reference (Nomic Optimized)",
+            "shards_input_dir": "genome/shards/human_shards",
+            "vectors_output_dir": "genome/knowledge_base/human_vectors",
+            "final_dat_name": "knowledge_base_full.dat",
+            "final_meta_name": "metadata_full.txt",
+            "max_tokens": 2048,  
+            "embedding_dim": 768, 
+            "batch_size": 1,
+            "preprocessing": {
+                "download_url": "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_full_analysis_set.fna.gz",
+                "raw_data_dir": "genome/genome_data/genome_data_human",
+                "raw_filename": "grch38.fna.gz",
+                "preprocessed_filename": "human_genome.txt"
+            }
+        }
+    }
+}
