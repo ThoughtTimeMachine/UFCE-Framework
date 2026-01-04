@@ -39,13 +39,7 @@
   },
   "plugins": {
     "shell": {
-      "sidecar": true,
-      "scope": [
-        {
-          "name": "binaries/velocity-engine",
-          "sidecar": true
-        }
-      ]
+      "open": true
     }
   }
 }

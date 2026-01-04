@@ -5,11 +5,24 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "shell:allow-execute",
     "shell:allow-open",
     {
       "identifier": "shell:allow-spawn",
-      "allow": [{ "name": "binaries/velocity-engine", "args": true }]
+      "allow": [
+        {
+          "name": "binaries/velocity-engine",
+          "sidecar": true
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "binaries/velocity-engine",
+          "sidecar": true
+        }
+      ]
     }
   ]
 }
