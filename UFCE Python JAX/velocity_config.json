@@ -1,5 +1,5 @@
 {
-    "active_dataset": "human_genome",
+    "active_dataset": "personal_documents",
     "datasets": {
         "ecolie_genome": {
             "description": "E. coli Genomic Data",
@@ -29,7 +29,7 @@
         },
         "personal_documents": {
             "description": "Personal Document Archive (Emails, PDFs, Notes, Code, etc..)",
-            "shards_input_dir": "personal/shards/personal_shards",
+            "shards_input_dir": "recall/personal/shards/personal_shards",
             "vectors_output_dir": "personal/knowledge_base/personal_vectors",
             "final_dat_name": "knowledge_base_full.dat",
             "final_meta_name": "metadata_full.txt",
