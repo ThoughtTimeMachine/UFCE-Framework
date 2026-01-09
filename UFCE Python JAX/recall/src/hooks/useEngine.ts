@@ -1,110 +1,54 @@
-import { useState, useEffect, useRef } from 'react';
-import { Command, Child } from '@tauri-apps/plugin-shell';
-
-// Define the shape of the Close Event from Tauri
-interface CloseEvent {
-  code: number;
-  signal: number | null;
-}
+import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 
 export function useEngine() {
-  const [status, setStatus] = useState<string>('idle'); 
+  const [status, setStatus] = useState('booting');
   const [logs, setLogs] = useState<string[]>([]);
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
-  const childProcess = useRef<Child | null>(null);
 
   useEffect(() => {
-    let isMounted = true;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let unlistenFn: (() => void) | undefined;
 
-    // Helper to verify if the sidecar is responding
-    async function checkHealth(url: string) {
-      let attempts = 0;
-      while (attempts < 10 && isMounted) {
-        try {
-          const res = await fetch(`${url}/`);
-          if (res.ok) {
-            setStatus('ready');
-            addLog('🟢 Connection established! Engine is online.');
-            return;
-          }
-        } catch {
-           // Connection refused? Just wait and retry.
-        }
-        await new Promise(r => setTimeout(r, 500));
-        attempts++;
-      }
-      if (isMounted) setStatus('timeout');
-    }
+    // TASK 1: SETUP LOGS (Don't await this blocking the rest!)
+    listen<string>('plugin:process|stdout', (event) => {
+        const line = event.payload;
+        setLogs((prev) => [...prev.slice(-49), line]);
+    }).then((fn) => {
+        unlistenFn = fn;
+    }).catch(err => console.warn("Log listener failed (non-critical):", err));
 
-    // Helper to append logs safely
-    function addLog(msg: string) {
-      setLogs(prev => [...prev.slice(-9), msg]); 
-    }
-
-    async function startEngine() {
+    // TASK 2: POLL FOR PORT (Start Immediately!)
+    console.log("React: Starting to poll for engine port...");
+    
+    intervalId = setInterval(async () => {
       try {
-        setStatus('booting');
-        addLog('🚀 Spawning Engine (Waiting for Port)...');
+        // Ask Rust for the port number
+        const port = await invoke<number>('get_api_port');
+        
+        // Log to browser console so we can see it working
+        console.log("React: Rust reported port:", port);
 
-        // This path must match 'externalBin' in tauri.conf.json
-        const command = Command.sidecar('binaries/velocity-engine');
-
-        // EVENT 1: STDOUT (The Python engine talking)
-        command.stdout.on('data', (line: string) => {
-          if (isMounted) {
-            console.log('[PY]', line);
-            // Check for the "Magic String" we printed in main.py
-            if (line.includes('VELOCITY_PORT:')) {
-              const detectedPort = line.split('VELOCITY_PORT:')[1].trim();
-              const portNum = parseInt(detectedPort);
-              
-              if (!isNaN(portNum)) {
-                const url = `http://localhost:${portNum}`;
-                setBaseUrl(url);
-                addLog(`🎯 Port Detected: ${portNum}`);
-                checkHealth(url); 
-              }
-            }
-          }
-        });
-
-        // EVENT 2: CLOSE (The engine stopped)
-        command.on('close', (data: unknown) => {
-          if (isMounted) {
-            // Cast 'data' to the CloseEvent interface we defined above
-            const event = data as CloseEvent; 
-            addLog(`⚠️ Engine stopped with code ${event.code}`);
-            setStatus('error');
-          }
-        });
-
-        // EVENT 3: ERROR (Startup failure)
-        command.on('error', (error: unknown) => {
-          if (isMounted) {
-            addLog(`❌ Engine error: ${String(error)}`);
-            setStatus('error');
-          }
-        });
-
-        const child = await command.spawn();
-        childProcess.current = child;
-
-      } catch (err: unknown) {
-        // Handle generic JS errors during spawn
-        const message = err instanceof Error ? err.message : String(err);
-        addLog(`❌ Failed to spawn: ${message}`);
-        setStatus('error');
+        if (port && port > 0) {
+          const url = `http://127.0.0.1:${port}`;
+          console.log("React: Connecting to", url);
+          
+          setBaseUrl(url);
+          setStatus('ready');
+          
+          // Stop polling once we have the port
+          if (intervalId) clearInterval(intervalId);
+        }
+      } catch (err) {
+        console.error("React: Error asking Rust for port:", err);
       }
-    }
+    }, 1000); // Check every 1 second
 
-    startEngine();
-
-    // CLEANUP: Kill the process when the React component unmounts
+    // Cleanup
     return () => {
-      isMounted = false;
-      if (childProcess.current) {
-        childProcess.current.kill();
-      }
+      if (intervalId) clearInterval(intervalId);
+      if (unlistenFn) unlistenFn();
     };
   }, []);
 
