@@ -251,3 +251,7 @@ cython_debug/
 .cursorindexingignore
 UFCE Python JAX/ecoli_shards/ecoli_genome.txt
 UFCE Python JAX/genome_data/ecoli_mg1655.fna.gz
+/UFCE Python JAX/wiki/extracted
+/UFCE Python JAX/extracted/AA
+UFCE Python JAX/recall/src-tauri/ingestion_state.json
+/UFCE Python JAX/models

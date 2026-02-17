@@ -1,8 +1,16 @@
 import os
 import sys
 
-# --- 1. FORCE UNBUFFERED OUTPUT ---
+# --- 1. USER CONFIGURATION ---
+# Set this to 512. If it crashes, lower to 256.
+DEFAULT_BATCH_SIZE = 512 
+
+# --- 2. FORCE TRUE OFFLINE MODE ---
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
 os.environ["PYTHONUNBUFFERED"] = "1"
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1" 
+
 if sys.stdout and sys.platform.startswith('win'):
     try:
         sys.stdout.reconfigure(encoding='utf-8')
@@ -10,12 +18,32 @@ if sys.stdout and sys.platform.startswith('win'):
     except:
         pass
 
+# --- 3. GPU BINARY INJECTION ---
+current_dir = os.getcwd()
+possible_paths = [
+    os.path.abspath(os.path.join(current_dir, "binaries")),
+    os.path.abspath(os.path.join(os.path.dirname(current_dir), "binaries")),
+    os.path.abspath(r"C:\Users\kylek\UFCE-Framework\UFCE Python JAX\binaries"),
+    os.path.abspath(os.path.join(current_dir, "..", "binaries"))
+]
+gpu_lib_path = next((p for p in possible_paths if os.path.exists(p)), None)
+
+if gpu_lib_path:
+    print(f"--- [BOOT] Found GPU Binaries at: {gpu_lib_path} ---", flush=True)
+    os.environ["PATH"] = gpu_lib_path + os.pathsep + os.environ["PATH"]
+    if hasattr(os, 'add_dll_directory'):
+        try:
+            os.add_dll_directory(gpu_lib_path)
+        except Exception as e:
+            print(f"--- [BOOT] Failed to add DLL directory: {e} ---", flush=True)
+
 import shutil
 import json
 import time
 import socket
 import uvicorn
 import threading
+import queue 
 import glob
 import hashlib
 import pypdf
@@ -24,33 +52,20 @@ import numpy as np
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Generator
-
-# --- HARDWARE CONFIG ---
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".90" 
-os.environ["XLA_FLAGS"] = "--xla_gpu_strict_conv_algorithm_picker=false"
+from typing import List, Generator, Optional
 
 # --- IMPORTS ---
 print("--- [BOOT] Importing AI Engines... ---", flush=True)
-import torch  # <--- Explicit PyTorch Import for Diagnostics
+import torch
 from sentence_transformers import SentenceTransformer
 import jax.numpy as jnp
 from jax import jit, device_put
 import jax
 
-# --- 2. THE REAL HARDWARE CHECK (PYTORCH) ---
-print("----------------------------------------------------------------", flush=True)
-print(f"--- INGESTION ENGINE (PyTorch) CHECK ---", flush=True)
-if torch.cuda.is_available():
-    print(f">>> SUCCESS: GPU DETECTED FOR INGESTION", flush=True)
-    print(f">>> Device: {torch.cuda.get_device_name(0)}", flush=True)
-    print(f">>> VRAM: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB", flush=True)
-    device_str = "cuda"
-else:
-    print(">>> WARNING: RUNNING ON CPU (Ingestion will be slow)", flush=True)
-    device_str = "cpu"
-print("----------------------------------------------------------------", flush=True)
+# --- HARDWARE CONFIG ---
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".90" 
+os.environ["XLA_FLAGS"] = "--xla_gpu_strict_conv_algorithm_picker=false"
 
 # --- CONFIG & STATE LOCATIONS ---
 CONFIG_FILENAME = "velocity_config.json"
@@ -96,7 +111,7 @@ def get_dataset_path():
     return os.path.abspath(os.path.join(current_dir, raw_path))
 
 def load_velocity_config():
-    candidates = [CONFIG_FILENAME, os.path.join("..", CONFIG_FILENAME), os.path.join("..", "..", CONFIG_FILENAME), r"C:\Users\kylek\UFCE-Framework\UFCE Python JAX\recall\velocity_config.json"]
+    candidates = [CONFIG_FILENAME, os.path.join("..", CONFIG_FILENAME), os.path.join("..", "..", CONFIG_FILENAME)]
     config_path = next((p for p in candidates if os.path.exists(p)), None)
     
     try:
@@ -140,21 +155,31 @@ class IngestionState:
         self.current_status = "Idle"
         self.progress = 0.0
         self.active_bundle_name = "Default Personal"
-        self.load_state()
+        
+        if not os.path.exists(STATE_FILE):
+            print(f"[STATE] No state found. Creating new at {STATE_FILE}", flush=True)
+            self.save_state()
+        else:
+            self.load_state()
 
     def load_state(self):
-        if os.path.exists(STATE_FILE):
-            try:
-                with open(STATE_FILE, 'r') as f:
-                    data = json.load(f)
-                    self.source_queue = data.get('queue', [])
-                    self.processed_files = set(data.get('processed', []))
-                    self.active_bundle_name = data.get('active_bundle', "Default Personal")
-            except: pass
+        try:
+            with open(STATE_FILE, 'r') as f:
+                data = json.load(f)
+                self.source_queue = data.get('queue', [])
+                self.processed_files = set(data.get('processed', []))
+                self.active_bundle_name = data.get('active_bundle', "Default Personal")
+        except:
+            print("[WARN] State file corrupt. Resetting.", flush=True)
+            self.save_state()
 
     def save_state(self):
-        with open(STATE_FILE, 'w') as f:
-            json.dump({'queue': self.source_queue, 'processed': list(self.processed_files), 'active_bundle': self.active_bundle_name}, f)
+        try:
+            os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
+            with open(STATE_FILE, 'w') as f:
+                json.dump({'queue': self.source_queue, 'processed': list(self.processed_files), 'active_bundle': self.active_bundle_name}, f)
+        except Exception as e:
+             print(f"[ERROR] Failed to save state: {e}", flush=True)
 
     def add_folder(self, path):
         if path not in self.source_queue:
@@ -173,17 +198,18 @@ class IngestionState:
 
 state = IngestionState()
 
-# --- INGESTION ENGINE ---
+# --- INGESTION ENGINE (DYNAMIC BATCHING + STREAMING MERGE) ---
 class IngestionEngine:
     def __init__(self):
         self.config = load_velocity_config()
+        self.chunk_queue = queue.Queue(maxsize=5) 
+        self.save_queue = queue.Queue(maxsize=500)   
 
     def get_allowed_extensions(self):
         return ['.txt', '.md', '.pdf', '.docx', '.html'] 
 
     def scan_files(self):
         allowed_exts = self.get_allowed_extensions()
-        print(f"[SEARCH] Scanning for extensions: {allowed_exts}", flush=True)
         files_to_process = []
         for folder in state.source_queue:
             if os.path.isdir(folder):
@@ -195,23 +221,91 @@ class IngestionEngine:
                                 files_to_process.append(full_path)
         return files_to_process
 
-    def run_ingestion_task(self, embedder_model):
+    def loader_worker(self, files_subset, worker_id):
+        if worker_id == 0:
+             print(f"[SWARM-{worker_id}] Leader thread active.", flush=True)
+
+        for file_path in files_subset:
+            try:
+                t0 = time.time()
+                if file_path in state.processed_files: continue
+
+                if worker_id == 0: 
+                     state.current_status = f"Scanning {os.path.basename(file_path)}..."
+                
+                raw_text = ""
+                if file_path.lower().endswith('.pdf'):
+                    try:
+                        reader = pypdf.PdfReader(file_path)
+                        for page in reader.pages:
+                            t = page.extract_text()
+                            if t: raw_text += t + "\n"
+                    except: pass
+                else:
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        raw_text = f.read()
+
+                raw_text = raw_text.strip()
+                if not raw_text: continue
+
+                chunks = list(chunk_text_generator(raw_text, chunk_size=1000, overlap=150))
+                
+                self.chunk_queue.put((file_path, chunks))
+                
+                dt = time.time() - t0
+                print(f"[SWARM-{worker_id}] 🟢 Prepped {os.path.basename(file_path)} ({len(chunks)} chunks) in {dt:.2f}s", flush=True)
+                
+            except Exception as e:
+                print(f"[LOADER-{worker_id} ERROR] {file_path}: {e}", flush=True)
+
+    def writer_worker(self, output_dir, vecs_dir, shards_dir):
+        while True:
+            item = self.save_queue.get()
+            if item is None: break 
+            
+            file_path, vectors, chunks = item
+            
+            try:
+                if vectors.shape[1] > 768: vectors = vectors[:, :768]
+                base_name = hashlib.md5(file_path.encode()).hexdigest()
+                np.save(os.path.join(vecs_dir, f"{base_name}.npy"), vectors)
+                
+                with open(os.path.join(shards_dir, f"{base_name}.txt"), 'w', encoding='utf-8') as f:
+                    for chunk in chunks:
+                        clean_chunk = chunk.replace("\n", " ")
+                        f.write(clean_chunk + "\n")
+                
+                state.processed_files.add(file_path)
+                state.save_state()
+            except Exception as e:
+                print(f"[WRITER ERROR] {e}", flush=True)
+
+    def run_ingestion_task(self, embedder_model, user_batch_size=None):
         state.is_ingesting = True
-        state.current_status = "Scanning folders..."
-        
-        # --- GPU DIAGNOSTIC ---
-        print(f"[INIT] Embedding Engine Device: {embedder_model.device}", flush=True)
-        
-        self.config = load_velocity_config()
-        target_dim = self.config['embedding_dim'] if self.config else 768
         
         files = self.scan_files()
-        total = len(files)
-        
-        if total == 0:
-            state.current_status = "Nothing new to process."
+        if not files:
+            # If no files, we might just need to merge existing shards
+            print("[PIPELINE] No new files. Checking for merge...", flush=True)
+            output_dir = get_dataset_path()
+            shards_dir = os.path.join(output_dir, "shards")
+            vecs_dir = os.path.join(output_dir, "vectors")
+            self.merge_shards(vecs_dir, shards_dir, output_dir)
+            
             state.is_ingesting = False
+            state.current_status = "Finished."
+            state.progress = 100.0
             return
+
+        # Determine Batch Size
+        if user_batch_size:
+            final_batch_size = user_batch_size
+        elif torch.cuda.is_available():
+            final_batch_size = DEFAULT_BATCH_SIZE
+        else:
+            final_batch_size = 32
+
+        print(f"[PIPELINE] Starting FP16 Pipeline | Batch Size: {final_batch_size} | Files: {len(files)}", flush=True)
 
         output_dir = get_dataset_path()
         shards_dir = os.path.join(output_dir, "shards")
@@ -219,148 +313,157 @@ class IngestionEngine:
         os.makedirs(shards_dir, exist_ok=True)
         os.makedirs(vecs_dir, exist_ok=True)
 
-        state.current_status = f"Ingesting {total} files..."
-        print(f"[INGEST] Starting processing of {total} files...", flush=True)
+        # 1. SPAWN LOADERS
+        NUM_LOADERS = 16 
+        chunk_size = len(files) // NUM_LOADERS + 1
+        file_batches = [files[i:i + chunk_size] for i in range(0, len(files), chunk_size)]
         
-        for idx, file_path in enumerate(files):
+        loader_threads = []
+        for i, batch in enumerate(file_batches):
+            if batch:
+                t = threading.Thread(target=self.loader_worker, args=(batch, i))
+                t.start()
+                loader_threads.append(t)
+        
+        print(f"[SWARM] Active Loaders: {len(loader_threads)}", flush=True)
+
+        # 2. START WRITER
+        writer_t = threading.Thread(target=self.writer_worker, args=(output_dir, vecs_dir, shards_dir))
+        writer_t.start()
+
+        # 3. GPU LOOP
+        print(f"[GPU] Waiting for chunks...", flush=True)
+        
+        while True:
             try:
-                file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-                print(f"[INGEST] ({idx+1}/{total}) Loading {os.path.basename(file_path)} ({file_size_mb:.2f} MB)...", flush=True)
-                
-                raw_text = ""
-                # PDF vs Text
-                if file_path.lower().endswith('.pdf'):
-                    try:
-                        reader = pypdf.PdfReader(file_path)
-                        for page in reader.pages:
-                            t = page.extract_text()
-                            if t: raw_text += t + "\n"
-                    except Exception as pdf_err:
-                        print(f"[WARN] Failed to parse PDF {file_path}: {pdf_err}", flush=True)
+                job = self.chunk_queue.get(timeout=2) 
+            except queue.Empty:
+                if any(t.is_alive() for t in loader_threads):
+                    continue 
                 else:
-                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                        raw_text = f.read()
-
-                raw_text = raw_text.strip()
-                if not raw_text: 
-                    print("   -> Empty file, skipping.", flush=True)
-                    continue
-
-                print("   -> Starting Streaming Pipeline...", flush=True)
+                    print("\n[PIPELINE] All loaders finished. Shutting down writer...", flush=True)
+                    self.save_queue.put(None) 
+                    break
+            
+            file_path, chunks = job
+            state.current_status = f"Embedding {os.path.basename(file_path)}"
+            
+            all_vectors = []
+            
+            for i in range(0, len(chunks), final_batch_size):
+                batch = chunks[i : i + final_batch_size]
                 
-                chunk_stream = chunk_text_generator(raw_text, chunk_size=1000, overlap=150)
+                # Mixed Precision
+                if torch.cuda.is_available():
+                    with torch.cuda.amp.autocast():
+                        vec_batch = embedder_model.encode(batch)
+                else:
+                    vec_batch = embedder_model.encode(batch)
                 
-                # --- ADAPTIVE BATCH SIZE ---
-                # If GPU is found, use bigger batches. If CPU, keep it small.
-                batch_size = 512 if torch.cuda.is_available() else 64
+                all_vectors.append(vec_batch)
                 
-                current_batch = []
-                all_vectors = []
-                all_chunks = []
-                batch_idx = 0
-                est_total_chunks = len(raw_text) // 4000 
-                if est_total_chunks == 0: est_total_chunks = 1
-                
-                for chunk in chunk_stream:
-                    current_batch.append(chunk)
-                    all_chunks.append(chunk)
-                    
-                    if len(current_batch) >= batch_size:
-                        if batch_idx % 20 == 0:
-                             print(f"      [BATCH] Embedding batch {batch_idx}...", flush=True)
+                if i % 100 == 0:
+                     print(f"   [GPU] ⏩ Embedded {i}/{len(chunks)} chunks for {os.path.basename(file_path)}", flush=True)
 
-                        vec_batch = embedder_model.encode(current_batch)
-                        all_vectors.append(vec_batch)
-                        
-                        processed_so_far = batch_idx * batch_size
-                        file_progress = min(0.99, processed_so_far / est_total_chunks)
-                        global_progress = ((idx + file_progress) / total) * 100
-                        state.progress = global_progress
-                        state.current_status = f"Embedding {os.path.basename(file_path)}: {int(file_progress*100)}%"
-                        
-                        current_batch = []
-                        batch_idx += 1
+            if all_vectors:
+                final_vecs = np.vstack(all_vectors)
+                self.save_queue.put((file_path, final_vecs, chunks))
+            
+            state.progress += (100 / len(files))
 
-                if current_batch:
-                    vec_batch = embedder_model.encode(current_batch)
-                    all_vectors.append(vec_batch)
-
-                print("   -> Finalizing file...", flush=True)
-                vectors = np.vstack(all_vectors)
-                if vectors.shape[1] > target_dim:
-                    vectors = vectors[:, :target_dim]
-                
-                base_name = hashlib.md5(file_path.encode()).hexdigest()
-                np.save(os.path.join(vecs_dir, f"{base_name}.npy"), vectors)
-                
-                with open(os.path.join(shards_dir, f"{base_name}.txt"), 'w', encoding='utf-8') as f:
-                    for chunk in all_chunks:
-                        clean_chunk = chunk.replace("\n", " ")
-                        f.write(clean_chunk + "\n")
-
-                state.processed_files.add(file_path)
-                state.save_state()
-                print("   -> Done.", flush=True)
-
-            except Exception as e:
-                print(f"[ERROR] processing {file_path}: {e}", flush=True)
-
-        state.current_status = "Merging Database..."
-        print("[INGEST] Merging database...", flush=True)
-        self.merge_shards(vecs_dir, shards_dir, output_dir)
+        for t in loader_threads: t.join()
+        writer_t.join()
         
+        state.current_status = "Merging Database..."
+        self.merge_shards(vecs_dir, shards_dir, output_dir)
         agent.load_database() 
-        state.current_status = "Ingestion Complete"
         state.is_ingesting = False
         state.progress = 100.0
-        print("[INGEST] Finished.", flush=True)
+        print("[PIPELINE] Finished.", flush=True)
 
+    # --- CRITICAL FIX: STREAMING MERGE (PREVENTS RAM CRASH) ---
     def merge_shards(self, vecs_dir, shards_dir, output_dir):
-        all_vecs = []
-        all_meta = []
-        files = sorted(os.listdir(vecs_dir))
+        print(f"[MERGE] Starting ZERO-RAM merge sequence...", flush=True)
+        files = sorted([f for f in os.listdir(vecs_dir) if f.endswith(".npy")])
+        if not files: return
         
-        for fname in files:
-            if not fname.endswith(".npy"): continue
-            base_name = fname.replace(".npy", "")
-            npy_path = os.path.join(vecs_dir, fname)
-            txt_path = os.path.join(shards_dir, base_name + ".txt")
-            
+        # 1. Calculate Total Size first (Fast Scan)
+        total_rows = 0
+        DIM = 768
+        
+        print(f"[MERGE] Scanning {len(files)} shards for size...", flush=True)
+        for i, fname in enumerate(files):
             try:
-                v = np.load(npy_path)
-                if os.path.exists(txt_path):
-                    with open(txt_path, 'r', encoding='utf-8') as f:
-                        chunks = f.readlines()
-                else: chunks = []
-                
-                min_len = min(v.shape[0], len(chunks))
-                if min_len > 0:
-                    all_vecs.append(v[:min_len])
-                    all_meta.extend(chunks[:min_len])
-            except Exception as e:
-                print(f"[ERROR] Merge failed for {fname}: {e}", flush=True)
-
-        if not all_vecs:
-            print("[WARN] No vectors found to merge.", flush=True)
-            return
-
-        final_vecs = np.vstack(all_vecs)
+                # Use mmap_mode='r' to read shape without loading data
+                npy_path = os.path.join(vecs_dir, fname)
+                v = np.load(npy_path, mmap_mode='r')
+                total_rows += v.shape[0]
+                if i % 10 == 0: print(f"   scanned {i}/{len(files)}", flush=True)
+            except: pass
+            
+        print(f"[MERGE] Total Database Size: {total_rows} vectors", flush=True)
+        
+        # 2. Allocate Massive File on Disk (Zero RAM usage)
         dat_name = "knowledge_base_full.dat"
         meta_name = "metadata_full.txt"
+        final_dat_path = os.path.join(output_dir, dat_name)
         
-        fp = np.memmap(os.path.join(output_dir, dat_name), dtype='float32', mode='w+', shape=final_vecs.shape)
-        fp[:] = final_vecs[:]
+        # Create the empty file container
+        fp = np.memmap(final_dat_path, dtype='float32', mode='w+', shape=(total_rows, DIM))
+        
+        # 3. Stream Data (Load One -> Write One -> Delete One)
+        current_idx = 0
+        with open(os.path.join(output_dir, meta_name), 'w', encoding='utf-8') as f_meta:
+            for i, fname in enumerate(files):
+                try:
+                    state.current_status = f"Merging {i}/{len(files)}"
+                    state.progress = (i / len(files)) * 100
+                    
+                    # Paths
+                    base_name = fname.replace(".npy", "")
+                    npy_path = os.path.join(vecs_dir, fname)
+                    txt_path = os.path.join(shards_dir, base_name + ".txt")
+                    
+                    # Load Vector (RAM Spike = Size of 1 file only)
+                    v = np.load(npy_path) # Load fully into RAM for speed
+                    rows = v.shape[0]
+                    
+                    # Load Metadata
+                    if os.path.exists(txt_path):
+                        with open(txt_path, 'r', encoding='utf-8') as ft: 
+                            chunks = ft.readlines()
+                    else: chunks = []
+                    
+                    # Safety trim
+                    min_len = min(rows, len(chunks))
+                    
+                    # WRITE TO DISK (Flush to SSD)
+                    if min_len > 0:
+                        fp[current_idx : current_idx + min_len] = v[:min_len]
+                        for line in chunks[:min_len]:
+                            f_meta.write(line.strip() + "\n")
+                        
+                        current_idx += min_len
+                    
+                    # Memory Cleanup
+                    del v 
+                    if i % 5 == 0:
+                        fp.flush() # Force write to disk
+                        print(f"[MERGE] 💾 Wrote shard {i}/{len(files)} to disk. ({(current_idx/total_rows)*100:.1f}%)", flush=True)
+                        
+                except Exception as e:
+                    print(f"[MERGE ERROR] Failed on {fname}: {e}", flush=True)
+
         fp.flush()
-        
-        with open(os.path.join(output_dir, meta_name), 'w', encoding='utf-8') as f:
-            for line in all_meta:
-                f.write(line.strip() + "\n")
-        print(f"[SUCCESS] Merged {final_vecs.shape[0]} vectors.", flush=True)
+        del fp # Close file handle
+        print("[MERGE] ✅ Database merge complete.", flush=True)
 
 # --- DATA MODELS ---
 class PathRequest(BaseModel): path: str
 class BundleRequest(BaseModel): path: str; name: str
 class QueryRequest(BaseModel): text: str
+class IngestionConfig(BaseModel): 
+    batch_size: Optional[int] = None
 
 # --- UFCE AGENT ---
 class UFCEAgent:
@@ -369,8 +472,27 @@ class UFCEAgent:
         self.top_k = top_k
         self.config = load_velocity_config()
         self.db_path = "Not Loaded"
+        
         print("[INIT] Loading Embedding Model...", flush=True)
-        self.embedder = SentenceTransformer('nomic-ai/nomic-embed-text-v1.5', trust_remote_code=True) 
+        if getattr(sys, 'frozen', False):
+            application_path = os.path.dirname(sys.executable)
+        else:
+            application_path = os.path.dirname(os.path.abspath(__file__))
+            
+        local_model_path = os.path.join(application_path, "embedder")
+
+        if os.path.exists(local_model_path) and os.path.exists(os.path.join(local_model_path, "config.json")):
+            print(f"[BOOT] Loading OFFLINE model from: {local_model_path}", flush=True)
+            self.embedder = SentenceTransformer(local_model_path, trust_remote_code=True, local_files_only=True)
+        else:
+            print(f"[BOOT] Model not found at {local_model_path}. Downloading...", flush=True)
+            self.embedder = SentenceTransformer('nomic-ai/nomic-embed-text-v1.5', trust_remote_code=True)
+            try:
+                self.embedder.save(local_model_path)
+                print(f"[BOOT] Model saved to {local_model_path} for future offline use.", flush=True)
+            except Exception as e:
+                print(f"[WARN] Failed to save offline copy: {e}", flush=True)
+
         self.load_database()
 
     def load_database(self):
@@ -463,10 +585,13 @@ def clear_knowledge():
     except Exception as e: return {"error": str(e)}
 
 @app.post("/start_ingestion")
-def start_ingestion(background_tasks: BackgroundTasks):
+def start_ingestion(background_tasks: BackgroundTasks, config: Optional[IngestionConfig] = None):
     if state.is_ingesting: return {"status": "busy"}
-    background_tasks.add_task(ingestor.run_ingestion_task, agent.embedder)
-    return {"status": "started"}
+    chosen_batch = None
+    if config and config.batch_size:
+        chosen_batch = config.batch_size
+    background_tasks.add_task(ingestor.run_ingestion_task, agent.embedder, chosen_batch)
+    return {"status": "started", "batch_size": chosen_batch or DEFAULT_BATCH_SIZE}
 
 @app.post("/save_bundle")
 def save_bundle(req: BundleRequest):
