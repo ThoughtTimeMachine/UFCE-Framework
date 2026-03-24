@@ -96,7 +96,7 @@ Host version is faster (no container overhead, direct GPU access if using Ollama
 ```bash
 ollama run llama3
  ```
-Keep this window open — it runs the server on localhost:11434
+Keep this window open — it runs the server on localhost:XXXXXX
 
 ### Option 2: Ollama Inside Docker Container
 Use this if you want everything isolated in the container 
@@ -114,7 +114,7 @@ RUN ollama pull llama3
 ollama serve &
 ```
 3. **Update Agent URL**(in UFCE_agent.py):
-OLLAMA_URL = "http://localhost:11434/api/generate"
+OLLAMA_URL = "http://localhost:XXXXXX/api/generate"
 
 ### Step 5: Launch the Agent
 
