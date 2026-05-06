@@ -1,6 +1,6 @@
 # UFCE-Streaming
 
-Zero-memory streaming kernels for large-scale spatial-temporal interactions on consumer hardware. Supports infinite-context exact RAG, larger-than-VRAM LLM training via Project VELOCITY, and high-throughput JAX + CUDA implementations.
+Zero-memory streaming kernels for large-scale spatial-temporal interactions on consumer hardware. Supports Massive scale large-context exact RAG, larger-than-VRAM LLM training via Project VELOCITY, and high-throughput JAX + CUDA implementations.
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-yellow.svg)](https://www.python.org/)
@@ -22,7 +22,7 @@ Zero-memory streaming kernels for large-scale spatial-temporal interactions on c
 - 125 billion interaction points processed in 2.89 seconds (CPU) with 0.00 MB additional memory overhead.
 - 50 trillion interactions (equivalent to a 1 billion token context) processed in 24.7 seconds on RTX 4070 Ti.
 
-## Infinite Context RAG Agent
+## Massive scale large-context RAG Agent
 
 This repository includes a functional RAG agent that performs exact retrieval over large datasets (e.g., full Wikipedia) using a tiered memory reservoir (SSD-backed vector database) and Drill-Down attention.
 
@@ -153,7 +153,7 @@ python genome/genome_search/ufce_genome_search_demo.py
 - `velocity_8b_hybrid_trainer_save_layers_less_128GB_ram.py` — Disk-offload optimizer state for lower RAM systems.
 
 ### 🤖 Agent & Demo
-- `UFCE_agent.py` — The interactive RAG agent with infinite-context retrieval over the knowledge base.
+- `UFCE_agent.py` — The interactive RAG agent with Massive scale large-context retrieval over the knowledge base.
 
 ### 📜 Legacy & Docs
 - `validate_attention.cu` — Optimized CUDA C++ kernels.
@@ -205,7 +205,7 @@ We benchmarked the cost of introducing physics-informed decision logic into the 
 
 While traditional training requires the entire model to fit in VRAM, **Project VELOCITY** implements a **Layer-Wise Swapper**. This treats your System RAM (DDR5) as a high-speed L4 cache and your GPU VRAM as a dedicated compute core.
 
-### The "Infinite Model" Benchmark
+### The "Massive scale large-context Model" Benchmark
 We successfully executed a **32GB Model (Llama-3-8B equivalent)** on a single **12GB RTX 4070 Ti**.
 
 | Metric | Achievement | Impact |
@@ -236,7 +236,7 @@ For proprietary software, closed-source applications, or enterprise use cases wh
 **Contact:** thoughttimemachinexr@gmail.com for enterprise inquiries.
 ## 📚 Citation
 
-If you use the UFCE Streaming Kernels or the Infinite Context Agent in your research, please cite the project:
+If you use the UFCE Streaming Kernels or the Massive scale large-context  Agent in your research, please cite the project:
 
 ```bibtex
 @software{UFCE-Streaming_2025,
