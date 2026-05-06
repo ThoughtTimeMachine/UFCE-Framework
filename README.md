@@ -156,7 +156,6 @@ python genome/genome_search/ufce_genome_search_demo.py
 - `UFCE_agent.py` — The interactive RAG agent with infinite-context retrieval over the knowledge base.
 
 ### 📜 Legacy & Docs
-- `paper/` —  (LaTeX + PDF).
 - `validate_attention.cu` — Optimized CUDA C++ kernels.
 
 ### 📊 Benchmarks & Legacy Demos
