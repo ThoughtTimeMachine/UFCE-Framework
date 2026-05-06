@@ -1,49 +1,37 @@
-# The UniField Coupling Equation (UFCE) Framework
+# UFCE Framework
 
-**A Zero-Memory Streaming Kernel for Trillion-Scale Spatial-Temporal Interactions**
+Zero-memory streaming kernels for large-scale spatial-temporal interactions on consumer hardware. Supports infinite-context exact RAG, larger-than-VRAM LLM training via Project VELOCITY, and high-throughput JAX + CUDA implementations.
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-yellow.svg)](https://www.python.org/)
 [![JAX](https://img.shields.io/badge/JAX-Accelerated-green.svg)](https://github.com/google/jax)
-[![Zenodo](https://zenodo.org/badge/DOI/10.5281/zenodo.18055873.svg)](https://zenodo.org/records/18055873)
 
-## 🚀 The Breakthrough
-
-Traditional dense matrix algorithms require **1 Terabyte of RAM** to store 125 billion interaction points.
-
-The **UFCE streaming kernel** eliminates the "Memory Wall" entirely — computing aggregate statistics with **zero additional memory overhead** while achieving **real-time performance on consumer hardware**.
-
-### Latest Benchmarks (December 2025 — Ryzen 9 7950X + RTX 4070 Ti)
+## Performance Benchmarks
 
 **Hardware:** AMD Ryzen 9 7950X (CPU) + NVIDIA RTX 4070 Ti (GPU) + 80GB DDR5 RAM
 
-| Kernel Implementation | Precision | Throughput | Speedup vs CPU | Use Case |
-| :--- | :--- | :--- | :--- | :--- |
-| **Ryzen 9 7950X (CPU)** | FP64 | 43.33 Billion ops/s | 1.0× | Baseline Validation |
-| **RTX 4070 Ti (Scientific)** | FP32 | 1.50 Trillion ops/s | 34.7× | Legacy Native Kernel |
-| **JAX "God Mode"** | **FP32** | **2.02 Trillion ops/s** | **47.0×** | **Theoretical Max / Scanning** |
-| **JAX Streaming Softmax** | FP32 | **232.6 Billion ops/s** | 5.3× | **LLM Attention (Linear)** |
-| **JAX Top-K** | FP32 | 1.40 Billion ops/s | 0.03× | **Deep Security Forensics** |
+| Kernel Implementation     | Precision | Throughput          | Speedup vs CPU | Use Case                     |
+|---------------------------|-----------|---------------------|----------------|------------------------------|
+| Ryzen 9 7950X (CPU)       | FP64      | 43.33 Billion ops/s | 1.0×           | Baseline Validation          |
+| RTX 4070 Ti (Scientific)  | FP32      | 1.50 Trillion ops/s | 34.7×          | Legacy Native Kernel         |
+| JAX "God Mode"            | FP32      | 2.02 Trillion ops/s | 47.0×          | Theoretical Max / Scanning   |
+| JAX Streaming Softmax     | FP32      | 232.6 Billion ops/s | 5.3×           | LLM Attention (Linear)       |
+| JAX Top-K                 | FP32      | 1.40 Billion ops/s  | 0.03×          | Anomaly Detection            |
 
-### Key Achievements
-* **The 2 Trillion Barrier Broken:** The JAX Blocked Kernel achieved **2,020 Billion operations per second** on a single consumer GPU.
-* **Real-World LLM Attention:** Validated a **Streaming Softmax** kernel running at **232 Billion ops/s**, proving that exact attention statistics can be computed for 100M+ token contexts in real-time.
-* **Infinite Context:** Processed a **50 Trillion Interaction** workload (equivalent to a 1 Billion Token Context) in just **24.7 seconds** on RTX 4070 Ti.
-* **1 Terabyte Challenge**: 125 billion points processed in **2.89 seconds** (CPU) with **0.00 MB memory overhead**.
+**Additional measured results:**
+- 125 billion interaction points processed in 2.89 seconds (CPU) with 0.00 MB additional memory overhead (1 Terabyte Challenge).
+- 50 trillion interactions (equivalent to a 1 billion token context) processed in 24.7 seconds on RTX 4070 Ti.
 
----
+## Infinite Context RAG Agent
 
-## 🤖 The Infinite Context Agent (Tutorial)
+This repository includes a functional RAG agent that performs exact retrieval over large datasets (e.g., full Wikipedia) using a tiered memory reservoir (SSD-backed vector database) and Drill-Down attention.
 
-This repository includes a fully functional **"Drill-Down" AI Agent** capable of searching massive datasets (e.g., all of Wikipedia) on a consumer PC without using enterprise VRAM.
+### Wikipedia Data Preparation
 
-### Step 1: Preparing Wikipedia Input Shards
-The pipeline works best with the full English Wikipedia dump.
-
-1. **Download the Dump**:
+1. **Download the Wikipedia dump**:
    ```bash
    wget https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-pages-articles.xml.bz2
-
+   
 ### Step 2: Prepare the Data
 
 1. **Extract Clean Text Shards (using WikiExtractor)**:
@@ -63,8 +51,6 @@ The UFCE ingestion pipeline has been upgraded to a **sharded, resumable architec
 
 - `ufce_ingestion_pipeline_shard.py`: Processes individual text shards into vector + metadata pairs.
 - `merge_shards.py`: Concatenates all shards into the final `knowledge_base_full.dat` and `metadata_full.txt` used by the UFCE agent.
-
-This design enables **safe, parallel, and resumable** ingestion of datasets far larger than system RAM while maintaining the **Zero-Memory** philosophy.
 
 Convert the text into a Tiered Memory Reservoir (SSD-backed Vector DB). 
 The sharded pipeline processes Wikipedia articles in independent chunks, using streaming embedding per shard to avoid RAM overload on massive datasets.
@@ -126,9 +112,7 @@ python UFCE_agent.py
 
 # 🧬 UFCE Genome: Searching the Code of Life
 
-We have expanded the UFCE framework to handle biological data. Just as the Wikipedia agent searches human knowledge, the Genome agent searches genetic code—mapping raw DNA sequences into semantic vector space.
-
-This module allows researchers to search massive genomic datasets (like the E. coli genome or Human Chromosomes) for functional motifs, gene clusters, and promoter regions using natural language or sequence queries.
+The framework supports semantic search over genomic data (e.g., E. coli genome or larger sequences).
 
 ### Key Capabilities
 - **Semantic DNA Search**: Find "CRISPR arrays" or "Lac Operon" not just by exact string matching, but by functional similarity in vector space.
@@ -153,9 +137,9 @@ python genome/genome_search/ufce_genome_search_demo.py
 ## 📂 Repository Contents
 
 ### 🧠 Core Framework
-- `ufce_jax_god_mode_benchmark.py` — The Record Breaker. Runs the "God Mode" block-streaming kernel (2.02T ops/s).
-- `ufce_jax_real_world_measurements.py` — The Real World. Runs the Streaming Softmax (LLM) and Top-K (Security) kernels.
-- `ufce_attention_core.py` — **Legacy** — Early prototype for attention logic (now integrated into agent and trainers).
+- `ufce_jax_god_mode_benchmark.py` —  Runs the "God Mode" block-streaming kernel (2.02T ops/s).
+- `ufce_jax_real_world_measurements.py` — Runs the Streaming Softmax (LLM) and Top-K (Security) kernels.
+- `ufce_attention_core.py` — **Legacy** — Core attention logic (now integrated into the agent and trainers).
 
 ### 🛠️ Ingestion Pipeline (Sharded & Resumable)
 - `ufce_ingestion_pipeline_shard.py` — Processes individual Wikipedia shards into vector + metadata pairs (resumable, semantic chunking).
@@ -172,7 +156,7 @@ python genome/genome_search/ufce_genome_search_demo.py
 - `UFCE_agent.py` — The interactive RAG agent with infinite-context retrieval over the knowledge base.
 
 ### 📜 Legacy & Docs
-- `paper/` — Full academic preprint (LaTeX + PDF).
+- `paper/` —  (LaTeX + PDF).
 - `validate_attention.cu` — Optimized CUDA C++ kernels.
 
 ### 📊 Benchmarks & Legacy Demos
@@ -195,7 +179,7 @@ This repo is configured as a VS Code Dev Container — the easiest way to reprod
 python cyber_validation.py
 python blockchain_validation.py
 ```
-**Run the Record-Breaking "God Mode" Benchmark:**
+**Run the "God Mode" Benchmark:**
 
 ```bash
 python ufce_jax_god_mode_benchmark.py
@@ -223,7 +207,7 @@ We benchmarked the cost of introducing physics-informed decision logic into the 
 While traditional training requires the entire model to fit in VRAM, **Project VELOCITY** implements a **Layer-Wise Swapper**. This treats your System RAM (DDR5) as a high-speed L4 cache and your GPU VRAM as a dedicated compute core.
 
 ### The "Infinite Model" Benchmark
-We successfully executed a **32GB Model (Llama-3-8B equivalent)** on a single **12GB RTX 4070 Ti** with near-zero compute starvation.
+We successfully executed a **32GB Model (Llama-3-8B equivalent)** on a single **12GB RTX 4070 Ti**.
 
 | Metric | Achievement | Impact |
 | :--- | :--- | :--- |
@@ -248,7 +232,7 @@ Project VELOCITY eliminates the "Stop-and-Go" latency of standard data loading. 
 This project is open-source under the GNU General Public License v3.0 (GPLv3). This ensures that the core framework remains free for researchers, students, and open-source projects.
 
 ### Commercial Licensing
-For proprietary software, closed-source applications, or enterprise use cases where GPLv3 compliance is not feasible (e.g., defense, proprietary robotics, closed banking systems), a Commercial License is available. This license waives the copyleft requirements.
+For proprietary software, closed-source applications, or enterprise use cases where GPLv3 compliance is not feasible, a Commercial License is available. This license waives the copyleft requirements.
 
 **Contact:** thoughttimemachinexr@gmail.com for enterprise inquiries.
 ## 📚 Citation
