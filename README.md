@@ -10,16 +10,16 @@ Zero-memory streaming kernels for large-scale spatial-temporal interactions on c
 
 **Hardware:** AMD Ryzen 9 7950X (CPU) + NVIDIA RTX 4070 Ti (GPU) + 80GB DDR5 RAM
 
-| Kernel Implementation     | Precision | Throughput          | Speedup vs CPU | Use Case                     |
-|---------------------------|-----------|---------------------|----------------|------------------------------|
-| Ryzen 9 7950X (CPU)       | FP64      | 43.33 Billion ops/s | 1.0×           | Baseline Validation          |
-| RTX 4070 Ti (Scientific)  | FP32      | 1.50 Trillion ops/s | 34.7×          | Legacy Native Kernel         |
-| JAX "God Mode"            | FP32      | 2.02 Trillion ops/s | 47.0×          | Theoretical Max / Scanning   |
-| JAX Streaming Softmax     | FP32      | 232.6 Billion ops/s | 5.3×           | LLM Attention (Linear)       |
-| JAX Top-K                 | FP32      | 1.40 Billion ops/s  | 0.03×          | Anomaly Detection            |
+| Kernel Implementation        | Throughput          | 
+|------------------------------|---------------------|
+| Ryzen 9 7950X (CPU)          | 43.33 Billion ops/s |
+| RTX 4070 Ti (Scientific)     | 1.50 Trillion ops/s |
+| JAX "block-streaming kernel" | 2.02 Trillion ops/s |
+| JAX Streaming Softmax        | 232.6 Billion ops/s |
+| JAX Top-K                    | 1.40 Billion ops/s  |
 
 **Additional measured results:**
-- 125 billion interaction points processed in 2.89 seconds (CPU) with 0.00 MB additional memory overhead (1 Terabyte Challenge).
+- 125 billion interaction points processed in 2.89 seconds (CPU) with 0.00 MB additional memory overhead.
 - 50 trillion interactions (equivalent to a 1 billion token context) processed in 24.7 seconds on RTX 4070 Ti.
 
 ## Infinite Context RAG Agent
