@@ -1,4 +1,4 @@
-# UFCE Framework
+# UFCE-Streaming
 
 Zero-memory streaming kernels for large-scale spatial-temporal interactions on consumer hardware. Supports infinite-context exact RAG, larger-than-VRAM LLM training via Project VELOCITY, and high-throughput JAX + CUDA implementations.
 
@@ -112,7 +112,7 @@ python UFCE_agent.py
 
 # 🧬 UFCE Genome: Searching the Code of Life
 
-The framework supports semantic search over genomic data (e.g., E. coli genome or larger sequences).
+The repo supports semantic search over genomic data (e.g., E. coli genome or larger sequences).
 
 ### Key Capabilities
 - **Semantic DNA Search**: Find "CRISPR arrays" or "Lac Operon" not just by exact string matching, but by functional similarity in vector space.
@@ -136,7 +136,7 @@ python genome/genome_search/ufce_genome_search_demo.py
 ```
 ## 📂 Repository Contents
 
-### 🧠 Core Framework
+### 🧠 Core Details
 - `ufce_jax_god_mode_benchmark.py` —  Runs the "God Mode" block-streaming kernel (2.02T ops/s).
 - `ufce_jax_real_world_measurements.py` — Runs the Streaming Softmax (LLM) and Top-K (Security) kernels.
 - `ufce_attention_core.py` — **Legacy** — Core attention logic (now integrated into the agent and trainers).
@@ -228,7 +228,7 @@ Project VELOCITY eliminates the "Stop-and-Go" latency of standard data loading. 
 ## ⚖️ Licensing & Commercial Use
 
 ### Open Source License
-This project is open-source under the GNU General Public License v3.0 (GPLv3). This ensures that the core framework remains free for researchers, students, and open-source projects.
+This project is open-source under the GNU General Public License v3.0 (GPLv3). This ensures that the core project remains free for researchers, students, and open-source projects.
 
 ### Commercial Licensing
 For proprietary software, closed-source applications, or enterprise use cases where GPLv3 compliance is not feasible, a Commercial License is available. This license waives the copyleft requirements.
@@ -236,12 +236,12 @@ For proprietary software, closed-source applications, or enterprise use cases wh
 **Contact:** thoughttimemachinexr@gmail.com for enterprise inquiries.
 ## 📚 Citation
 
-If you use the UFCE Streaming Kernels or the Infinite Context Agent in your research, please cite the framework:
+If you use the UFCE Streaming Kernels or the Infinite Context Agent in your research, please cite the project:
 
 ```bibtex
-@software{ufce_framework_2025,
+@software{UFCE-Streaming_2025,
   author = {Kyle Killian},
-  title = {The UniField Coupling Equation (UFCE) Framework: Zero-Memory Streaming Kernels},
+  title = {The UniField Coupling Equation (UFCE) : Zero-Memory Streaming Kernels},
   year = {2025},
   publisher = {Zenodo},
   doi = {10.5281/zenodo.17906337},
