@@ -17,7 +17,7 @@ import os
 import glob
 import numpy as np
 import json
-from llama_cpp import Llama  # <--- The secure backend
+from llama_cpp import Llama 
 from tqdm import tqdm
 
 # --- LOAD CONFIGURATION ---
