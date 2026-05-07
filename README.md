@@ -248,3 +248,7 @@ If you use the UFCE Streaming Kernels or the Massive scale large-context  Agent 
   url = {[https://github.com/thoughttimemachinexr/UFCE](https://github.com/thoughttimemachinexr/UFCE)}
 }
 
+## Disclaimer
+
+This software is provided "AS IS", without warranty of any kind.  
+It is experimental research code. Use it entirely at your own risk.
